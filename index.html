@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KLineChart Pro - Dev Playground</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #151517;
+      color: white;
+      font-family: sans-serif;
+    }
+    #app {
+      width: 100vw;
+      height: 100vh;
+    }
+    .dev-banner {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(38, 166, 154, 0.2);
+      border: 1px solid #26A69A;
+      color: #26A69A;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      z-index: 1000;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="dev-banner">Dev Mode (Live Reload)</div>
+  <div id="app"></div>
+
+  <!-- Import the LESS file directly so styles hot-reload -->
+  <script type="module">
+    import './src/index.less'
+  </script>
+  
+  <!-- Import the dev script -->
+  <script type="module" src="/dev.ts"></script>
+</body>
+</html>

@@ -29,3 +29,4 @@ The css style uses css variables to control the color, as follows,
   --klinecharts-pro-border-color: #292929;
 }
 ```
+

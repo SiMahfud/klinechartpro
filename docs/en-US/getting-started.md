@@ -4,10 +4,10 @@
 Use npm or yarn
 ```bash
 # npm
-npm install klinecharts @klinecharts/pro
+npm install klinecharts @simahfud/klinecharts-pro
 
 # yarn
-yarn install klinecharts @klinecharts/pro
+yarn install klinecharts @simahfud/klinecharts-pro
 ```
 If it is imported directly through a script tag, you can use either of the following two CDNs
 ::: warning Note
@@ -16,10 +16,10 @@ For production environments, it is recommended to use a clear version number to 
 
 ```html
 <!-- unpkg -->
-<script src="https://unpkg.com/@klinecharts/pro/dist/klinecharts-pro.umd.js"></script>
+<script src="https://unpkg.com/@simahfud/klinecharts-pro/dist/klinecharts-pro.umd.js"></script>
 
 <!-- jsdelivr -->
-<script src="https://cdn.jsdelivr.net/@klinecharts/pro/dist/klinecharts-pro.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/@simahfud/klinecharts-pro/dist/klinecharts-pro.umd.js"></script>
 ```
 
 ## Usage
@@ -31,9 +31,9 @@ For production environments, it is recommended to use a clear version number to 
 In projects using package managers such as npm and yarn
 ```javascript
 // Import js
-import { KLineChartPro, DefaultDatafeed } from '@klinecharts/pro'
+import { KLineChartPro, DefaultDatafeed } from '@simahfud/klinecharts-pro'
 // Import css
-import '@klinecharts/pro/dist/klinecharts-pro.css'
+import '@simahfud/klinecharts-pro/dist/klinecharts-pro.css'
 
 // Create Instance
 const chart = new KLineChartPro({
@@ -58,10 +58,10 @@ const chart = new KLineChartPro({
 In projects introduced directly through script tags
 ```html
 <!-- Import js -->
-<script src="https://cdn.jsdelivr.net/@klinecharts/pro/dist/klinecharts-pro.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/@simahfud/klinecharts-pro/dist/klinecharts-pro.umd.js"></script>
 
 <!-- Import css -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/@klinecharts/pro/dist/klinecharts-pro.css"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/@simahfud/klinecharts-pro/dist/klinecharts-pro.css"/>
 <script>
   // Create Instance
   const chart = new klinechartspro.KLineChartPro({
@@ -84,3 +84,4 @@ In projects introduced directly through script tags
 </script>
 ```
 The first chart is created. Working <a href="https://jsfiddle.net/mawsyh/ct65rysp/20/" target="_blank">example</a>
+

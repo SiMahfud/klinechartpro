@@ -29,3 +29,4 @@ css样式采用css变量控制颜色，具体如下，
   --klinecharts-pro-border-color: #292929;
 }
 ```
+

@@ -106,3 +106,4 @@ Set period.
 () => Period
 ```
 Get period.
+

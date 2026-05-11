@@ -13,5 +13,5 @@ hero:
       link: /en-US/getting-started
     - theme: alt
       text: View on Github
-      link: https://github.com/klinecharts/pro
+      link: https://github.com/SiMahfud/klinechartpro
 ---

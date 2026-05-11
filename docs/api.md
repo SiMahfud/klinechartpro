@@ -106,3 +106,4 @@ new KLineChartPro(
 () => Period
 ```
 获取周期
+
