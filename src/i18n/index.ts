@@ -14,18 +14,22 @@
 
 import zhCN from './zh-CN.json'
 import enUS from './en-US.json'
+import idID from './id-ID.json'
+import jaJP from './ja-JP.json'
+import koKR from './ko-KR.json'
 
-const locales = {
+const locales: Record<string, Record<string, string>> = {
   'zh-CN': zhCN,
-  'en-US': enUS
+  'en-US': enUS,
+  'id-ID': idID,
+  'ja-JP': jaJP,
+  'ko-KR': koKR
 }
 
-export function load (key: string, ls: any) {
-  // @ts-expect-error
+export function load (key: string, ls: Record<string, string>): void {
   locales[key] = ls
 }
 
-export default (key: string, locale: string) => {
-  // @ts-expect-error
+export default (key: string, locale: string): string => {
   return locales[locale]?.[key] ?? key
 }

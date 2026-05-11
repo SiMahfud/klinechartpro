@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-import { Component, createMemo, createSignal } from 'solid-js'
+import { Component, createMemo, createSignal, onMount, onCleanup } from 'solid-js'
 
 import { OverlayCreate, OverlayMode } from 'klinecharts'
 
@@ -20,9 +20,12 @@ import { List } from '../../component'
 import {
   createSingleLineOptions, createMoreLineOptions,
   createPolygonOptions, createFibonacciOptions, createWaveOptions,
+  createTradingOptions, createAnnotationOptions,
   createMagnetOptions,
   Icon
 } from './icons'
+import { customRegistry } from '../../registry'
+import type { SelectDataSourceItem } from '../../component'
 
 export interface DrawingBarProps {
   locale: string
@@ -41,6 +44,8 @@ const DrawingBar: Component<DrawingBarProps> = props => {
   const [polygonIcon, setPolygonIcon] = createSignal('circle')
   const [fibonacciIcon, setFibonacciIcon] = createSignal('fibonacciLine')
   const [waveIcon, setWaveIcon] = createSignal('xabcd')
+  const [tradingIcon, setTradingIcon] = createSignal('longPosition')
+  const [annotationIcon, setAnnotationIcon] = createSignal('frvp')
 
   const [modeIcon, setModeIcon] = createSignal('weak_magnet')
   const [mode, setMode] = createSignal('normal')
@@ -51,14 +56,47 @@ const DrawingBar: Component<DrawingBarProps> = props => {
 
   const [popoverKey, setPopoverKey] = createSignal('')
 
+  const [customIcon, setCustomIcon] = createSignal('')
+  const [customOverlayItems, setCustomOverlayItems] = createSignal<SelectDataSourceItem[]>([])
+
+  onMount(() => {
+    // Load initial custom overlays
+    const loadCustom = () => {
+      const items = customRegistry.getCustomOverlays().map(o => ({
+        key: o.name,
+        text: o.label
+      }))
+      setCustomOverlayItems(items)
+      if (items.length > 0 && !customIcon()) {
+        setCustomIcon(items[0].key)
+      }
+    }
+    loadCustom()
+    const unsub = customRegistry.onChange(loadCustom)
+    onCleanup(unsub)
+  })
+
   const overlays = createMemo(() => {
-    return [
+    const groups = [
       { key: 'singleLine', icon: singleLineIcon(), list: createSingleLineOptions(props.locale), setter: setSingleLineIcon },
       { key: 'moreLine', icon: moreLineIcon(), list: createMoreLineOptions(props.locale), setter: setMoreLineIcon },
       { key: 'polygon', icon: polygonIcon(), list: createPolygonOptions(props.locale), setter: setPolygonIcon },
       { key: 'fibonacci', icon: fibonacciIcon(), list: createFibonacciOptions(props.locale), setter: setFibonacciIcon },
-      { key: 'wave', icon: waveIcon(), list: createWaveOptions(props.locale), setter: setWaveIcon }
+      { key: 'wave', icon: waveIcon(), list: createWaveOptions(props.locale), setter: setWaveIcon },
+      { key: 'trading', icon: tradingIcon(), list: createTradingOptions(props.locale), setter: setTradingIcon },
+      { key: 'annotation', icon: annotationIcon(), list: createAnnotationOptions(props.locale), setter: setAnnotationIcon }
     ]
+    // Add custom group only if there are registered custom overlays
+    const customItems = customOverlayItems()
+    if (customItems.length > 0) {
+      groups.push({
+        key: 'custom',
+        icon: customIcon() || customItems[0]?.key || '',
+        list: customItems,
+        setter: setCustomIcon
+      })
+    }
+    return groups
   })
 
   const modes = createMemo(() => createMagnetOptions(props.locale))

@@ -97,7 +97,16 @@ export const mapping = {
   unlock,
   visible,
   invisible,
-  remove
+  remove,
+  // New tools use existing icon as fallback (rendered by name text)
+  longPosition: rect,
+  shortPosition: rect,
+  frvp: rect,
+  measure: segment,
+  priceRange: rect,
+  textNote: arrow,
+  anchoredVwap: segment,
+  priceLabel: priceLine
 }
 
 export function createSingleLineOptions (locale: string): SelectDataSourceItem[] {
@@ -162,10 +171,30 @@ export function createMagnetOptions (locale: string): SelectDataSourceItem[] {
   ]
 }
 
+export function createTradingOptions (locale: string): SelectDataSourceItem[] {
+  return [
+    { key: 'longPosition', text: i18n('long_position', locale) },
+    { key: 'shortPosition', text: i18n('short_position', locale) },
+    { key: 'measure', text: i18n('measure', locale) }
+  ]
+}
+
+export function createAnnotationOptions (locale: string): SelectDataSourceItem[] {
+  return [
+    { key: 'frvp', text: i18n('frvp', locale) },
+    { key: 'priceRange', text: i18n('price_range', locale) },
+    { key: 'textNote', text: i18n('text_note', locale) },
+    { key: 'anchoredVwap', text: i18n('anchored_vwap', locale) },
+    { key: 'priceLabel', text: i18n('price_label', locale) }
+  ]
+}
+
 interface IconProps {
   class?: string
   name: string
 }
 
-// @ts-expect-error
-export const Icon: Component<IconProps> = props => mapping[props.name](props.class)
+export const Icon: Component<IconProps> = props => {
+  const iconFn = (mapping as Record<string, any>)[props.name]
+  return iconFn ? iconFn(props.class) : null
+}

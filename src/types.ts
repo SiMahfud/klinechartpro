@@ -42,6 +42,32 @@ export interface Datafeed {
   unsubscribe (symbol: SymbolInfo, period: Period): void
 }
 
+export interface PersistenceOptions {
+  enabled: boolean
+  prefix?: string
+}
+
+export type AlertCondition = 'crosses_above' | 'crosses_below' | 'reaches'
+
+export interface AlertConfig {
+  id: string
+  symbol: string
+  condition: AlertCondition
+  price: number
+  message?: string
+  triggered?: boolean
+  callback?: () => void
+}
+
+export interface CustomIndicatorConfig {
+  name: string
+  category: 'main' | 'sub'
+  shortName?: string
+  calcParams?: any[]
+  figures?: any[]
+  calc?: (kLineDataList: KLineData[], params: any) => any[]
+}
+
 export interface ChartProOptions {
   container: string | HTMLElement
   styles?: DeepPartial<Styles>
@@ -56,6 +82,8 @@ export interface ChartProOptions {
   mainIndicators?: string[]
   subIndicators?: string[]
   datafeed: Datafeed
+  persistence?: PersistenceOptions
+  onError?: (error: Error) => void
 }
 
 export interface ChartPro {
@@ -71,4 +99,12 @@ export interface ChartPro {
   getSymbol(): SymbolInfo
   setPeriod(period: Period): void
   getPeriod(): Period
+  ready?(): Promise<void>
+  destroy?(): void
+  setAlert?(alert: AlertConfig): void
+  removeAlert?(id: string): void
+  getAlerts?(): AlertConfig[]
+  addComparisonSymbol?(symbol: SymbolInfo): void
+  removeComparisonSymbol?(ticker: string): void
+  registerCustomIndicator?(config: CustomIndicatorConfig): void
 }

@@ -14,7 +14,7 @@
 
 import { render } from 'solid-js/web'
 
-import { utils, Nullable, DeepPartial, Styles } from 'klinecharts'
+import { utils, Nullable, dispose, DeepPartial, Styles } from 'klinecharts'
 
 import ChartProComponent from './ChartProComponent'
 
@@ -41,10 +41,17 @@ export default class KLineChartPro implements ChartPro {
     this._container.classList.add('klinecharts-pro')
     this._container.setAttribute('data-theme', options.theme ?? 'light')
 
+    this._readyPromise = new Promise<void>((resolve) => {
+      this._readyResolve = resolve
+    })
+
     render(
       () => (
         <ChartProComponent
-          ref={(chart: ChartPro) => { this._chartApi = chart }}
+          ref={(chart: ChartPro) => {
+            this._chartApi = chart
+            this._readyResolve?.()
+          }}
           styles={options.styles ?? {}}
           watermark={options.watermark ?? (Logo as Node)}
           theme={options.theme ?? 'light'}
@@ -76,56 +83,71 @@ export default class KLineChartPro implements ChartPro {
   }
 
   private _container: Nullable<HTMLElement>
-
   private _chartApi: Nullable<ChartPro> = null
+  private _readyPromise: Promise<void>
+  private _readyResolve: Nullable<() => void> = null
 
+  ready (): Promise<void> {
+    return this._readyPromise
+  }
 
   setTheme (theme: string): void {
     this._container?.setAttribute('data-theme', theme)
-    this._chartApi!.setTheme(theme)
+    this._chartApi?.setTheme(theme)
   }
 
   getTheme (): string {
-    return this._chartApi!.getTheme()
+    return this._chartApi?.getTheme() ?? 'light'
   }
 
-  setStyles(styles: DeepPartial<Styles>): void {
-    this._chartApi!.setStyles(styles)
+  setStyles (styles: DeepPartial<Styles>): void {
+    this._chartApi?.setStyles(styles)
   }
 
-  getStyles(): Styles {
-    return this._chartApi!.getStyles()
+  getStyles (): Styles {
+    return this._chartApi?.getStyles() ?? {} as Styles
   }
 
   setLocale (locale: string): void {
-    this._chartApi!.setLocale(locale)
+    this._chartApi?.setLocale(locale)
   }
 
   getLocale (): string {
-    return this._chartApi!.getLocale()
+    return this._chartApi?.getLocale() ?? 'zh-CN'
   }
 
   setTimezone (timezone: string): void {
-    this._chartApi!.setTimezone(timezone)
+    this._chartApi?.setTimezone(timezone)
   }
 
   getTimezone (): string {
-    return this._chartApi!.getTimezone()
+    return this._chartApi?.getTimezone() ?? ''
   }
 
   setSymbol (symbol: SymbolInfo): void {
-    this._chartApi!.setSymbol(symbol)
+    this._chartApi?.setSymbol(symbol)
   }
 
   getSymbol (): SymbolInfo {
-    return this._chartApi!.getSymbol()
+    return this._chartApi?.getSymbol() ?? { ticker: '' }
   }
 
   setPeriod (period: Period): void {
-    this._chartApi!.setPeriod(period)
+    this._chartApi?.setPeriod(period)
   }
 
   getPeriod (): Period {
-    return this._chartApi!.getPeriod()
+    return this._chartApi?.getPeriod() ?? { multiplier: 1, timespan: 'day', text: 'D' }
+  }
+
+  destroy (): void {
+    if (this._container) {
+      dispose(this._container)
+      this._container.classList.remove('klinecharts-pro')
+      this._container.removeAttribute('data-theme')
+      this._container.innerHTML = ''
+      this._container = null
+    }
+    this._chartApi = null
   }
 }

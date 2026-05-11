@@ -71,7 +71,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
 
   let priceUnitDom: HTMLElement
 
-  let loading = false
+  const [loading, setLoading] = createSignal(false)
 
   const [theme, setTheme] = createSignal(props.theme)
   const [styles, setStyles] = createSignal(props.styles)
@@ -81,7 +81,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
   const [period, setPeriod] = createSignal(props.period)
   const [indicatorModalVisible, setIndicatorModalVisible] = createSignal(false)
   const [mainIndicators, setMainIndicators] = createSignal([...(props.mainIndicators!)])
-  const [subIndicators, setSubIndicators] = createSignal({})
+  const [subIndicators, setSubIndicators] = createSignal<Record<string, string>>({})
 
   const [timezoneModalVisible, setTimezoneModalVisible] = createSignal(false)
   const [timezone, setTimezone] = createSignal<SelectDataSourceItem>({ key: props.timezone, text: translateTimezone(props.timezone, props.locale) })
@@ -108,7 +108,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     getStyles: () => widget!.getStyles(),
     setLocale,
     getLocale: () => locale(),
-    setTimezone: (timezone: string) => { setTimezone({ key: timezone, text: translateTimezone(props.timezone, locale()) }) },
+    setTimezone: (newTimezone: string) => { setTimezone({ key: newTimezone, text: translateTimezone(newTimezone, locale()) }) },
     getTimezone: () => timezone().key,
     setSymbol,
     getSymbol: () => symbol(),
@@ -135,7 +135,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         break
       }
       case 'day': {
-        to = to - (to % (60 * 60 * 1000))
+        to = to - (to % (24 * 60 * 60 * 1000))
         from = to - count * period.multiplier * 24 * 60 * 60 * 1000
         break
       }
@@ -143,10 +143,10 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         const date = new Date(to)
         const week = date.getDay()
         const dif = week === 0 ? 6 : week - 1
-        to = to - dif * 60 * 60 * 24
+        to = to - dif * 24 * 60 * 60 * 1000
         const newDate = new Date(to)
         to = new Date(`${newDate.getFullYear()}-${newDate.getMonth() + 1}-${newDate.getDate()}`).getTime()
-        from = count * period.multiplier * 7 * 24 * 60 * 60 * 1000
+        from = to - count * period.multiplier * 7 * 24 * 60 * 60 * 1000
         break
       }
       case 'month': {
@@ -154,7 +154,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         const year = date.getFullYear()
         const month = date.getMonth() + 1
         to = new Date(`${year}-${month}-01`).getTime()
-        from = count * period.multiplier * 30 * 24 * 60 * 60 * 1000
+        from = to - count * period.multiplier * 30 * 24 * 60 * 60 * 1000
         const fromDate = new Date(from)
         from = new Date(`${fromDate.getFullYear()}-${fromDate.getMonth() + 1}-01`).getTime()
         break
@@ -163,7 +163,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         const date = new Date(to)
         const year = date.getFullYear()
         to = new Date(`${year}-01-01`).getTime()
-        from = count * period.multiplier * 365 * 24 * 60 * 60 * 1000
+        from = to - count * period.multiplier * 365 * 24 * 60 * 60 * 1000
         const fromDate = new Date(from)
         from = new Date(`${fromDate.getFullYear()}-01-01`).getTime()
         break
@@ -234,24 +234,23 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     mainIndicators().forEach(indicator => {
       createIndicator(widget, indicator, true, { id: 'candle_pane' })
     })
-    const subIndicatorMap = {}
+    const subIndicatorMap: Record<string, string> = {}
     props.subIndicators!.forEach(indicator => {
       const paneId = createIndicator(widget, indicator, true)
       if (paneId) {
-        // @ts-expect-error
         subIndicatorMap[indicator] = paneId
       }
     })
     setSubIndicators(subIndicatorMap)
     widget?.loadMore(timestamp => {
-      loading = true
+      setLoading(true)
       const get = async () => {
         const p = period()
         const [to] = adjustFromTo(p, timestamp!, 1)
         const [from] = adjustFromTo(p, to, 500)
         const kLineDataList = await props.datafeed.getHistoryKLineData(symbol(), p, from, to)
         widget?.applyMoreData(kLineDataList, kLineDataList.length > 0)
-        loading = false
+        setLoading(false)
       }
       get()
     })
@@ -282,10 +281,10 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
             } else {
               const newIndicators = { ...subIndicators() }
               widget?.removeIndicator(data.paneId, data.indicatorName)
-              // @ts-expect-error
-              delete newIndicators[data.indicatorName]
+              delete (newIndicators as Record<string, string>)[data.indicatorName]
               setSubIndicators(newIndicators)
             }
+            break
           }
         }
       }
@@ -309,13 +308,13 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
   })
 
   createEffect((prev?: PrevSymbolPeriod) => {
-    if (!loading) {
+    if (!loading()) {
       if (prev) {
         props.datafeed.unsubscribe(prev.symbol, prev.period)
       }
       const s = symbol()
       const p = period()
-      loading = true
+      setLoading(true)
       setLoadingVisible(true)
       const get = async () => {
         const [from, to] = adjustFromTo(p, new Date().getTime(), 500)
@@ -324,7 +323,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         props.datafeed.subscribe(s, p, data => {
           widget?.updateData(data)
         })
-        loading = false
+        setLoading(false)
         setLoadingVisible(false)
       }
       get()
@@ -466,17 +465,15 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
             setMainIndicators(newMainIndicators)
           }}
           onSubIndicatorChange={data => {
-            const newSubIndicators = { ...subIndicators() }
+            const newSubIndicators: Record<string, string> = { ...subIndicators() }
             if (data.added) {
               const paneId = createIndicator(widget, data.name)
               if (paneId) {
-                // @ts-expect-error
                 newSubIndicators[data.name] = paneId
               }
             } else {
               if (data.paneId) {
                 widget?.removeIndicator(data.paneId, data.name)
-                // @ts-expect-error
                 delete newSubIndicators[data.name]
               }
             }
@@ -537,7 +534,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           try {
             await startTransition(() => setDrawingBarVisible(!drawingBarVisible()))
             widget?.resize()
-          } catch (e) {}    
+          } catch (e) { console.warn('DrawingBar transition error:', e) }
         }}
         onSymbolClick={() => { setSymbolSearchModalVisible(!symbolSearchModalVisible()) }}
         onPeriodChange={setPeriod}

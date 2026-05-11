@@ -1,0 +1,74 @@
+.klinecharts-pro-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background-color: rgba(255, 77, 79, 0.1);
+  border-bottom: 1px solid rgba(255, 77, 79, 0.3);
+  animation: slideDown 0.3s ease-out;
+
+  .error-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .error-icon {
+      width: 18px;
+      height: 18px;
+      color: #ff4d4f;
+      flex-shrink: 0;
+    }
+
+    .error-message {
+      font-size: 13px;
+      color: #ff4d4f;
+    }
+  }
+
+  .error-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .retry-btn {
+      padding: 4px 12px;
+      font-size: 12px;
+      border: 1px solid rgba(255, 77, 79, 0.5);
+      border-radius: 4px;
+      background: transparent;
+      color: #ff4d4f;
+      cursor: pointer;
+      transition: all 0.2s;
+
+      &:hover {
+        background: rgba(255, 77, 79, 0.15);
+      }
+    }
+
+    .dismiss-btn {
+      padding: 2px 6px;
+      font-size: 14px;
+      border: none;
+      background: transparent;
+      color: #ff4d4f;
+      cursor: pointer;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+
+      &:hover {
+        opacity: 1;
+      }
+    }
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

@@ -12,11 +12,14 @@
  * limitations under the License.
  */
 
-import { Component, createMemo } from 'solid-js'
+import { Component, createSignal, onMount, onCleanup } from 'solid-js'
 
 import { Modal, List, Checkbox } from '../../component'
 
 import i18n from '../../i18n'
+
+import { MAIN_INDICATOR_NAMES, SUB_INDICATOR_NAMES } from '../../config'
+import { customRegistry, CustomRegistryItem } from '../../registry'
 
 type OnIndicatorChange = (
   params: {
@@ -29,13 +32,27 @@ type OnIndicatorChange = (
 export interface IndicatorModalProps {
   locale: string
   mainIndicators: string[]
-  subIndicators: object
+  subIndicators: Record<string, string>
   onMainIndicatorChange: OnIndicatorChange
   onSubIndicatorChange: OnIndicatorChange
   onClose: () => void
 }
 
 const IndicatorModal: Component<IndicatorModalProps> = props => {
+  const [customMain, setCustomMain] = createSignal<CustomRegistryItem[]>(
+    customRegistry.getCustomMainIndicators()
+  )
+  const [customSub, setCustomSub] = createSignal<CustomRegistryItem[]>(
+    customRegistry.getCustomSubIndicators()
+  )
+
+  onMount(() => {
+    const unsub = customRegistry.onChange(() => {
+      setCustomMain(customRegistry.getCustomMainIndicators())
+      setCustomSub(customRegistry.getCustomSubIndicators())
+    })
+    onCleanup(unsub)
+  })
 
   return (
     <Modal
@@ -46,9 +63,7 @@ const IndicatorModal: Component<IndicatorModalProps> = props => {
         class="klinecharts-pro-indicator-modal-list">
         <li class="title">{i18n('main_indicator', props.locale)}</li>
         {
-          [
-            'MA', 'EMA', 'SMA', 'BOLL', 'SAR', 'BBI'
-          ].map(name => {
+          MAIN_INDICATOR_NAMES.map(name => {
             const checked = props.mainIndicators.includes(name)
             return (
               <li
@@ -61,24 +76,47 @@ const IndicatorModal: Component<IndicatorModalProps> = props => {
             )
           })
         }
+        {/* Custom main indicators */}
+        {
+          customMain().map(item => {
+            const checked = props.mainIndicators.includes(item.name)
+            return (
+              <li
+                class="row"
+                onClick={_ => {
+                  props.onMainIndicatorChange({ name: item.name, paneId: 'candle_pane', added: !checked })
+                }}>
+                <Checkbox checked={checked} label={item.label}/>
+              </li>
+            )
+          })
+        }
         <li class="title">{i18n('sub_indicator', props.locale)}</li>
         {
-          [
-            'MA', 'EMA', 'VOL', 'MACD', 'BOLL', 'KDJ',
-            'RSI', 'BIAS', 'BRAR', 'CCI', 'DMI',
-            'CR', 'PSY', 'DMA', 'TRIX', 'OBV',
-            'VR', 'WR', 'MTM', 'EMV', 'SAR',
-            'SMA', 'ROC', 'PVT', 'BBI', 'AO'
-          ].map(name => {
+          SUB_INDICATOR_NAMES.map(name => {
             const checked = name in props.subIndicators
             return (
               <li
                 class="row"
                 onClick={_ => {
-                  // @ts-expect-error
                   props.onSubIndicatorChange({ name, paneId: props.subIndicators[name] ?? '', added: !checked });
                 }}>
                 <Checkbox checked={checked} label={i18n(name.toLowerCase(), props.locale)}/>
+              </li>
+            )
+          })
+        }
+        {/* Custom sub indicators */}
+        {
+          customSub().map(item => {
+            const checked = item.name in props.subIndicators
+            return (
+              <li
+                class="row"
+                onClick={_ => {
+                  props.onSubIndicatorChange({ name: item.name, paneId: props.subIndicators[item.name] ?? '', added: !checked })
+                }}>
+                <Checkbox checked={checked} label={item.label}/>
               </li>
             )
           })

@@ -24,9 +24,11 @@ export interface PeriodBarProps {
   symbol: SymbolInfo
   period: Period
   periods: Period[]
+  chartType?: string
   onMenuClick: () => void
   onSymbolClick: () => void
   onPeriodChange: (period: Period) => void
+  onChartTypeChange?: (type: string) => void
   onIndicatorClick: () => void
   onTimezoneClick: () => void
   onSettingClick: () => void
@@ -87,6 +89,20 @@ const PeriodBar: Component<PeriodBarProps> = props => {
           </span>
         ))
       }
+      {/* Chart Type Selector */}
+      <div class="item tools chart-type-selector">
+        <select
+          class="chart-type-select"
+          value={props.chartType ?? 'candle_solid'}
+          onChange={(e) => props.onChartTypeChange?.((e.target as HTMLSelectElement).value)}>
+          <option value="candle_solid">{i18n('candle_solid', props.locale)}</option>
+          <option value="candle_stroke">{i18n('candle_stroke', props.locale)}</option>
+          <option value="candle_up_stroke">{i18n('candle_up_stroke', props.locale)}</option>
+          <option value="candle_down_stroke">{i18n('candle_down_stroke', props.locale)}</option>
+          <option value="ohlc">{i18n('ohlc', props.locale)}</option>
+          <option value="area">{i18n('area', props.locale)}</option>
+        </select>
+      </div>
       <div
         class='item tools'
         onClick={props.onIndicatorClick}>
