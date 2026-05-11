@@ -19,7 +19,9 @@ import {
   TooltipIconPosition, ActionType, PaneOptions, Indicator, DomPosition, FormatDateType
 } from 'klinecharts'
 
+// @ts-ignore
 import lodashSet from 'lodash/set'
+// @ts-ignore
 import lodashClone from 'lodash/cloneDeep'
 
 import { SelectDataSourceItem, Loading } from './component'
@@ -28,6 +30,18 @@ import {
   PeriodBar, DrawingBar, IndicatorModal, TimezoneModal, SettingModal,
   ScreenshotModal, IndicatorSettingModal, SymbolSearchModal
 } from './widget'
+
+import ReplayBar from './widget/replay-bar'
+import ObjectTree from './widget/object-tree'
+import type { OverlayItem } from './widget/object-tree'
+import DrawingStyleEditor from './widget/drawing-style-editor'
+import type { DrawingStyleValues } from './widget/drawing-style-editor'
+import ContextMenu from './widget/context-menu'
+import type { ContextMenuItem } from './widget/context-menu'
+import { KeyboardShortcutManager } from './keyboard-shortcuts'
+import { BarReplayManager } from './bar-replay'
+import type { ReplayStatus } from './bar-replay'
+import i18n from './i18n'
 
 import { translateTimezone } from './widget/timezone-modal/data'
 
@@ -101,6 +115,35 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     visible: false, indicatorName: '', paneId: '', calcParams: [] as Array<any>
   })
 
+  // --- New feature state ---
+  const [chartType, setChartType] = createSignal('candle_solid')
+
+  // Replay
+  const [replayActive, setReplayActive] = createSignal(false)
+  const [replayStatus, setReplayStatus] = createSignal<string>('idle')
+  const [replayIndex, setReplayIndex] = createSignal(0)
+  const [replayTotal, setReplayTotal] = createSignal(0)
+  const [replaySpeed, setReplaySpeed] = createSignal(500)
+  let replayManager: BarReplayManager | null = null
+
+  // Object Tree
+  const [objectTreeVisible, setObjectTreeVisible] = createSignal(false)
+  const [overlayItems, setOverlayItems] = createSignal<OverlayItem[]>([])
+
+  // Style Editor
+  const [styleEditorVisible, setStyleEditorVisible] = createSignal(false)
+  const [styleEditorOverlayId, setStyleEditorOverlayId] = createSignal('')
+  const [styleEditorCurrentStyles, setStyleEditorCurrentStyles] = createSignal<any>({})
+
+  // Context Menu
+  const [contextMenuVisible, setContextMenuVisible] = createSignal(false)
+  const [contextMenuX, setContextMenuX] = createSignal(0)
+  const [contextMenuY, setContextMenuY] = createSignal(0)
+  const [contextMenuOverlayId, setContextMenuOverlayId] = createSignal('')
+
+  // Keyboard shortcuts
+  let shortcutManager: KeyboardShortcutManager | null = null
+
   props.ref({
     setTheme,
     getTheme: () => theme(),
@@ -113,7 +156,13 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     setSymbol,
     getSymbol: () => symbol(),
     setPeriod,
-    getPeriod: () => period()
+    getPeriod: () => period(),
+    setChartType: (type: string) => { setChartType(type); widget?.setStyles({ candle: { type: type as any } }) },
+    getChartType: () => chartType(),
+    startReplay: (dataSource: 'current' | 'custom') => startReplay(dataSource),
+    stopReplay: () => { replayManager?.stop(); setReplayActive(false) },
+    showObjectTree: () => { refreshOverlayItems(); setObjectTreeVisible(true) },
+    showStyleEditor: (overlayId: string) => { setStyleEditorOverlayId(overlayId); setStyleEditorVisible(true) }
   })
 
   const documentResize = () => {
@@ -289,10 +338,25 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         }
       }
     })
+
+    // --- Mount keyboard shortcuts ---
+    const container = (widgetRef as unknown as HTMLDivElement)?.parentElement
+    if (container) {
+      shortcutManager = new KeyboardShortcutManager(container as HTMLElement)
+      shortcutManager.register({ key: 'escape', description: 'Cancel overlay', callback: () => widget?.removeOverlay() })
+    }
+
+    // --- Track overlay clicks for style editor ---
+    widget?.subscribeAction(ActionType.OnCandleBarClick, (data: any) => {
+      // When candle is clicked, clear active overlay
+      setStyleEditorOverlayId('')
+    })
   })
 
   onCleanup(() => {
     window.removeEventListener('resize', documentResize)
+    shortcutManager?.destroy()
+    replayManager?.destroy()
     dispose(widgetRef!)
   })
 
@@ -437,6 +501,44 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     }
   })
 
+  // --- Helper: collect overlay items for Object Tree ---
+  const refreshOverlayItems = () => {
+    if (!widget) return
+    // Collect overlays by trying known ids — klinecharts getOverlayById requires an id
+    // Use internal method to get all overlays
+    const items: OverlayItem[] = []
+    try {
+      // Try to access chart's internal overlay store
+      const chartInstance = widget as any
+      const overlayStore = chartInstance._chartStore?.()?.getOverlayStore?.() ?? chartInstance.getOverlayStore?.()
+      if (overlayStore) {
+        const overlays = overlayStore.getInstances?.() ?? []
+        overlays.forEach((o: any) => {
+          items.push({ id: o.id, name: o.name, visible: o.visible !== false, groupId: o.groupId, paneId: o.paneId })
+        })
+      }
+    } catch {
+      // Fallback: empty list
+    }
+    setOverlayItems(items)
+  }
+
+  // --- Helper: start replay ---
+  const startReplay = (dataSource: 'current' | 'custom') => {
+    if (!widget) return
+    replayManager = new BarReplayManager(widget, props.datafeed)
+    replayManager.setHandlers({
+      onStep: (index, total) => { setReplayIndex(index); setReplayTotal(total) },
+      onStatusChange: (status) => setReplayStatus(status),
+      onEnd: () => setReplayStatus('ended')
+    })
+    replayManager.start({ dataSource, speed: replaySpeed() }).then(() => {
+      setReplayActive(true)
+      setReplayTotal(replayManager!.getTotal())
+      setReplayIndex(replayManager!.getIndex())
+    })
+  }
+
   return (
     <>
       <i class="icon-close klinecharts-pro-load-icon"/>
@@ -524,12 +626,68 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           }}
         />
       </Show>
+      {/* Context Menu */}
+      <Show when={contextMenuVisible()}>
+        <ContextMenu
+          x={contextMenuX()}
+          y={contextMenuY()}
+          items={[
+            { key: 'edit_style', label: i18n('edit_style', props.locale), icon: '🎨' },
+            { key: 'hide', label: i18n('hide', props.locale), icon: '👁' },
+            { key: 'delete', label: i18n('delete', props.locale), icon: '🗑', danger: true }
+          ]}
+          onSelect={(key) => {
+            const id = contextMenuOverlayId()
+            if (key === 'edit_style') {
+              setStyleEditorOverlayId(id)
+              setStyleEditorCurrentStyles({})
+              setStyleEditorVisible(true)
+            } else if (key === 'hide') {
+              widget?.overrideOverlay({ id, visible: false })
+            } else if (key === 'delete') {
+              widget?.removeOverlay({ id })
+            }
+            setContextMenuVisible(false)
+          }}
+          onClose={() => setContextMenuVisible(false)}
+        />
+      </Show>
+      {/* Object Tree Modal */}
+      <Show when={objectTreeVisible()}>
+        <ObjectTree
+          locale={props.locale}
+          overlays={overlayItems()}
+          onToggleVisibility={(id, visible) => { widget?.overrideOverlay({ id, visible }) }}
+          onRemove={(id) => { widget?.removeOverlay({ id }); refreshOverlayItems() }}
+          onSelect={(id) => { /* future: highlight selected overlay */ }}
+          onClose={() => setObjectTreeVisible(false)}
+        />
+      </Show>
+      {/* Drawing Style Editor */}
+      <Show when={styleEditorVisible()}>
+        <DrawingStyleEditor
+          locale={props.locale}
+          overlayId={styleEditorOverlayId()}
+          currentStyles={styleEditorCurrentStyles()}
+          onApply={(id, styles) => {
+            widget?.overrideOverlay({
+              id,
+              styles: {
+                line: { color: styles.lineColor, size: styles.lineWidth, style: styles.lineStyle },
+                polygon: { color: styles.lineColor, borderColor: styles.lineColor, borderSize: styles.lineWidth, borderStyle: styles.lineStyle }
+              } as any
+            })
+          }}
+          onClose={() => setStyleEditorVisible(false)}
+        />
+      </Show>
       <PeriodBar
         locale={props.locale}
         symbol={symbol()}
         spread={drawingBarVisible()}
         period={period()}
         periods={props.periods}
+        chartType={chartType()}
         onMenuClick={async () => {
           try {
             await startTransition(() => setDrawingBarVisible(!drawingBarVisible()))
@@ -538,6 +696,10 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         }}
         onSymbolClick={() => { setSymbolSearchModalVisible(!symbolSearchModalVisible()) }}
         onPeriodChange={setPeriod}
+        onChartTypeChange={(type) => {
+          setChartType(type)
+          widget?.setStyles({ candle: { type: type as any } })
+        }}
         onIndicatorClick={() => { setIndicatorModalVisible((visible => !visible)) }}
         onTimezoneClick={() => { setTimezoneModalVisible((visible => !visible)) }}
         onSettingClick={() => { setSettingModalVisible((visible => !visible)) }}
@@ -565,8 +727,38 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         <div
           ref={widgetRef}
           class='klinecharts-pro-widget'
-          data-drawing-bar-visible={drawingBarVisible()}/>
+          data-drawing-bar-visible={drawingBarVisible()}
+          onContextMenu={(e: MouseEvent) => {
+            // Right-click on chart: if an overlay is nearby, show context menu
+            e.preventDefault()
+            setContextMenuX(e.clientX)
+            setContextMenuY(e.clientY)
+            // Check if there's a selected overlay
+            const overlayId = styleEditorOverlayId()
+            if (overlayId) {
+              setContextMenuOverlayId(overlayId)
+              setContextMenuVisible(true)
+            }
+          }}
+        />
       </div>
+      {/* Replay Bar */}
+      <Show when={replayActive()}>
+        <ReplayBar
+          locale={props.locale}
+          status={replayStatus()}
+          index={replayIndex()}
+          total={replayTotal()}
+          speed={replaySpeed()}
+          onPlay={() => replayManager?.play()}
+          onPause={() => replayManager?.pause()}
+          onStepForward={() => replayManager?.stepForward()}
+          onStepBackward={() => replayManager?.stepBackward()}
+          onSpeedChange={(speed) => { setReplaySpeed(speed); replayManager?.setSpeed(speed) }}
+          onSeek={(index) => replayManager?.seekTo(index)}
+          onExit={() => { replayManager?.stop(); setReplayActive(false) }}
+        />
+      </Show>
     </>
   )
 }

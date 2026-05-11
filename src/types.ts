@@ -107,4 +107,11 @@ export interface ChartPro {
   addComparisonSymbol?(symbol: SymbolInfo): void
   removeComparisonSymbol?(ticker: string): void
   registerCustomIndicator?(config: CustomIndicatorConfig): void
+  // New features
+  setChartType?(type: string): void
+  getChartType?(): string
+  startReplay?(dataSource: 'current' | 'custom'): void
+  stopReplay?(): void
+  showObjectTree?(): void
+  showStyleEditor?(overlayId: string): void
 }
