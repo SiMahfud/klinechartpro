@@ -1,6 +1,14 @@
 # KLineChart Pro
 
-A professional-grade charting component built on [KLineChart](https://github.com/liihuu/KLineChart), powered by **SolidJS**. Features 23 built-in drawing tools (including TradingView-style position tools), multi-language support (5 locales), price alerts, data persistence, and a custom overlay API.
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![KLineChart](https://img.shields.io/badge/based%20on-KLineChart-orange)](https://github.com/liihuu/KLineChart)
+
+A professional-grade, TradingView-inspired charting component built on [KLineChart](https://github.com/liihuu/KLineChart), powered by **SolidJS**. Features 25 built-in drawing tools, bar replay, keyboard shortcuts, multi-chart type support, and a complete custom tool API.
+
+> 🔗 **Repository**: [github.com/SiMahfud/klinechartpro](https://github.com/SiMahfud/klinechartpro)  
+> 📦 Forked from [klinecharts/pro](https://github.com/klinecharts/pro)
+
+---
 
 ## ✨ Features
 
@@ -14,6 +22,17 @@ A professional-grade charting component built on [KLineChart](https://github.com
 - ⚡ Performance monitoring panel (FPS, memory, WS latency)
 - ♿ Full modal accessibility (focus trap, keyboard nav, ARIA)
 - 📱 Responsive layout with mobile support
+
+### Chart Types (6 types)
+
+| Type | Key | Description |
+|---|---|---|
+| **Candles** | `candle_solid` | Standard filled candlestick (default) |
+| **Hollow Candles** | `candle_stroke` | All candles outlined |
+| **Up Hollow** | `candle_up_stroke` | Up candles hollow, down filled |
+| **Down Hollow** | `candle_down_stroke` | Down candles hollow, up filled |
+| **OHLC Bars** | `ohlc` | Traditional open-high-low-close bars |
+| **Area** | `area` | Filled area chart |
 
 ### Drawing Tools (25 built-in)
 
@@ -33,36 +52,49 @@ A professional-grade charting component built on [KLineChart](https://github.com
 **Main chart:** MA, EMA, SMA, BOLL, SAR, BBI  
 **Sub chart:** VOL, MACD, KDJ, RSI, BIAS, BRAR, CCI, DMI, CR, PSY, DMA, TRIX, OBV, VR, WR, MTM, EMV, ROC, PVT, AO
 
-### Advanced Features 🆕
+### Advanced Features
 
 | Feature | Description |
 |---|---|
 | **⏯ Bar Replay** | Step through historical data bar by bar with play/pause/speed controls |
 | **⌨️ Keyboard Shortcuts** | Configurable hotkeys for all chart operations |
 | **🌳 Object Tree** | Manage all drawings — toggle visibility, select, delete |
-| **💾 Chart Templates** | Save/load indicator + style presets |
+| **💾 Chart Templates** | Save/load indicator + style presets via localStorage |
 | **🏷️ Price Labels** | Custom price markers on Y-axis |
-| **🔗 Crosshair Sync** | Synchronize crosshair across multiple charts |
-| **🎨 Style Editor** | Edit drawing properties (color, width, style) via double-click or right-click |
+| **🔗 Crosshair Sync** | Synchronize crosshair across multiple chart instances |
+| **🎨 Style Editor** | Edit drawing properties (color, width, style) via right-click |
+| **📋 Context Menu** | Right-click overlay menu with Edit/Hide/Delete actions |
+| **📊 Chart Type Selector** | Switch between 6 chart types from the toolbar |
 
 ---
 
 ## 📦 Installation
 
 ```bash
-npm install klinecharts @anthropic/klinecharts-pro
+npm install klinecharts klinecharts-pro
 ```
+
+Or clone this repository:
+
+```bash
+git clone https://github.com/SiMahfud/klinechartpro.git
+cd klinechartpro
+npm install
+npm run dev
+```
+
+---
 
 ## 🚀 Quick Start
 
 ```typescript
-import { KLineChartPro, DefaultDatafeed } from '@anthropic/klinecharts-pro'
+import { KLineChartPro, DefaultDatafeed } from 'klinecharts-pro'
 
 const chart = new KLineChartPro({
   container: 'chart-container',
   symbol: { ticker: 'AAPL', name: 'Apple Inc.', market: 'stocks' },
   period: { multiplier: 1, timespan: 'day', text: 'D' },
-  datafeed: new DefaultDatafeed('YOUR_API_KEY'),
+  datafeed: new DefaultDatafeed('YOUR_POLYGON_API_KEY'),
   theme: 'dark',
   locale: 'en-US'
 })
@@ -72,421 +104,64 @@ await chart.ready()
 console.log('Chart initialized:', chart.getSymbol())
 ```
 
+---
+
 ## 🔧 API Reference
 
-### KLineChartPro
+### Core Methods
 
 ```typescript
-const chart = new KLineChartPro(options: ChartProOptions)
+// Theme
+chart.setTheme('dark')          // 'dark' | 'light'
+chart.getTheme()
+
+// Locale
+chart.setLocale('en-US')        // 'en-US' | 'zh-CN' | 'id-ID' | 'ja-JP' | 'ko-KR'
+chart.getLocale()
+
+// Symbol & Period
+chart.setSymbol({ ticker: 'MSFT', name: 'Microsoft' })
+chart.getSymbol()
+chart.setPeriod({ multiplier: 5, timespan: 'minute', text: '5m' })
+chart.getPeriod()
+
+// Timezone
+chart.setTimezone('Asia/Jakarta')
+chart.getTimezone()
+
+// Styles (deep partial merge)
+chart.setStyles({ candle: { bar: { upColor: '#26A69A' } } })
+chart.getStyles()
 ```
 
-#### ChartProOptions
-
-| Property | Type | Default | Description |
-|---|---|---|---|
-| `container` | `string \| HTMLElement` | *required* | Container element or ID |
-| `symbol` | `SymbolInfo` | *required* | Initial symbol |
-| `period` | `Period` | *required* | Initial timeframe |
-| `datafeed` | `Datafeed` | *required* | Data feed implementation |
-| `theme` | `string` | `'light'` | `'light'` or `'dark'` |
-| `locale` | `string` | `'zh-CN'` | Locale code |
-| `timezone` | `string` | `'Asia/Shanghai'` | Timezone |
-| `drawingBarVisible` | `boolean` | `true` | Show drawing toolbar |
-| `mainIndicators` | `string[]` | `['MA']` | Initial main indicators |
-| `subIndicators` | `string[]` | `['VOL']` | Initial sub indicators |
-| `persistence` | `PersistenceOptions` | — | Enable localStorage persistence |
-| `onError` | `(error: Error) => void` | — | Error callback |
-
-#### Instance Methods
-
-| Method | Returns | Description |
-|---|---|---|
-| `ready()` | `Promise<void>` | Resolves when chart is fully initialized |
-| `setTheme(theme)` | `void` | Switch theme |
-| `getTheme()` | `string` | Get current theme |
-| `setLocale(locale)` | `void` | Switch locale |
-| `getLocale()` | `string` | Get current locale |
-| `setTimezone(tz)` | `void` | Switch timezone |
-| `getTimezone()` | `string` | Get current timezone |
-| `setSymbol(symbol)` | `void` | Switch symbol |
-| `getSymbol()` | `SymbolInfo` | Get current symbol |
-| `setPeriod(period)` | `void` | Switch period |
-| `getPeriod()` | `Period` | Get current period |
-| `destroy()` | `void` | Clean up and unmount |
-
----
-
-## 📊 Custom Indicators
-
-Register your own technical indicators using the `registerCustomIndicator` API.
-**They will automatically appear in the Indicator Menu** — no extra configuration needed.
+### Chart Type
 
 ```typescript
-import { registerCustomIndicator } from '@anthropic/klinecharts-pro'
-
-// Simple form — auto-appears in Sub Indicator menu with shortName as label
-registerCustomIndicator({
-  name: 'MyRSI',
-  shortName: 'MRSI',
-  calcParams: [14],
-  figures: [
-    { key: 'rsi', title: 'RSI: ', type: 'line' }
-  ],
-  calc: (dataList, indicator) => {
-    const period = indicator.calcParams[0] as number
-    let gains = 0, losses = 0
-
-    return dataList.map((kLineData, i) => {
-      if (i < period) return { rsi: NaN }
-
-      if (i === period) {
-        // Initial average
-        for (let j = 1; j <= period; j++) {
-          const change = dataList[j].close - dataList[j - 1].close
-          if (change > 0) gains += change
-          else losses -= change
-        }
-        gains /= period
-        losses /= period
-      } else {
-        const change = kLineData.close - dataList[i - 1].close
-        gains = (gains * (period - 1) + (change > 0 ? change : 0)) / period
-        losses = (losses * (period - 1) + (change < 0 ? -change : 0)) / period
-      }
-
-      const rs = losses === 0 ? 100 : gains / losses
-      return { rsi: 100 - (100 / (1 + rs)) }
-    })
-  }
-})
-
-// Advanced form — specify where it appears and with what label
-registerCustomIndicator({
-  template: {
-    name: 'VWAP',
-    shortName: 'VWAP',
-    calcParams: [],
-    figures: [{ key: 'vwap', title: 'VWAP: ', type: 'line' }],
-    calc: (dataList) => {
-      let cumVol = 0, cumTP = 0
-      return dataList.map((d) => {
-        const tp = (d.high + d.low + d.close) / 3
-        cumVol += d.volume ?? 0
-        cumTP += tp * (d.volume ?? 0)
-        return { vwap: cumVol > 0 ? cumTP / cumVol : NaN }
-      })
-    }
-  },
-  label: 'Volume Weighted Avg Price',
-  paneType: 'main'  // appears in Main Indicator menu (overlaid on candles)
-})
+// Switch chart type
+chart.setChartType('ohlc')        // candle_solid | candle_stroke | candle_up_stroke | candle_down_stroke | ohlc | area
+chart.getChartType()              // Returns current type
 ```
 
-> **Auto Menu:** Custom indicators automatically appear in the indicator selector dialog.
-> - `paneType: 'main'` → listed under "Main Indicators"
-> - `paneType: 'sub'` (default) → listed under "Sub Indicators"
-
-### Indicator Figure Types
-
-| Type | Description |
-|---|---|
-| `'line'` | Standard line chart |
-| `'bar'` | Bar/histogram |
-| `'circle'` | Circle markers |
-| `'rect'` | Rectangle shapes |
-
-### Indicator Configuration
-
-| Property | Type | Description |
-|---|---|---|
-| `name` | `string` | Unique identifier |
-| `shortName` | `string` | Display name in tooltips |
-| `calcParams` | `number[]` | Default calculation parameters |
-| `figures` | `Figure[]` | What to render (key, title, type) |
-| `calc` | `Function` | Calculation logic — receives `dataList` and `indicator` |
-| `series` | `string` | `'normal'`, `'price'`, or `'volume'` |
-| `precision` | `number` | Decimal places |
-
----
-
-## 🛠 Custom Drawing Tools (Overlays)
-
-Register your own drawing tools using the `registerCustomOverlay` API.
-**They will automatically appear in the Drawing Toolbar** under a "Custom" group.
+### Bar Replay
 
 ```typescript
-import { registerCustomOverlay } from '@anthropic/klinecharts-pro'
+// Start replay using current chart data
+chart.startReplay('current')
 
-// Simple form — auto-appears in Drawing Bar with template.name as label
-registerCustomOverlay({
-  name: 'myTrendZone',
-  totalStep: 3, // number of clicks to complete (entry + points + done)
-  needDefaultPointFigure: true,
-  needDefaultXAxisFigure: true,
-  needDefaultYAxisFigure: true,
-  styles: {
-    polygon: { color: 'rgba(76, 175, 80, 0.15)' }
-  },
-  createPointFigures: ({ coordinates, overlay }) => {
-    if (coordinates.length < 2) return []
+// Or start replay loading custom historical data
+chart.startReplay('custom')
 
-    // Access price data via overlay.points[i].value
-    // Access custom data via overlay.extendData
-    return [
-      {
-        type: 'polygon',
-        attrs: {
-          coordinates: [
-            coordinates[0],
-            { x: coordinates[1].x, y: coordinates[0].y },
-            coordinates[1],
-            { x: coordinates[0].x, y: coordinates[1].y }
-          ]
-        },
-        styles: { style: 'stroke_fill' }
-      },
-      {
-        type: 'text',
-        ignoreEvent: true,
-        attrs: {
-          x: coordinates[0].x + 4,
-          y: coordinates[0].y - 4,
-          text: 'My Zone'
-        },
-        styles: { color: '#4CAF50', size: 12 }
-      }
-    ]
-  }
-})
-
-// Advanced form — with custom display label
-registerCustomOverlay({
-  template: { name: 'orderBlock', totalStep: 3, ... },
-  label: 'Order Block'
-})
+// Stop and restore original data
+chart.stopReplay()
 ```
 
-> **Auto Menu:** Custom overlays appear as a new "Custom" group at the bottom of the drawing toolbar.
-> The group is only visible when at least one custom overlay has been registered.
-
-### Figure Types
-
-| Type | Attributes | Description |
-|---|---|---|
-| `line` | `{ coordinates: [{x, y}, {x, y}] }` | Line between two points |
-| `polygon` | `{ coordinates: [{x, y}, ...] }` | Filled/stroked polygon |
-| `text` | `{ x, y, text }` | Text label |
-
-### Figure Styles
+**Programmatic control via `BarReplayManager`:**
 
 ```typescript
-{
-  style: 'solid' | 'dashed' | 'fill' | 'stroke_fill',
-  color: string,
-  size: number  // line width or font size
-}
-```
+import { BarReplayManager } from 'klinecharts-pro'
 
----
+const replay = new BarReplayManager(chartWidget, datafeed)
 
-## 💾 Data Persistence
-
-```typescript
-import { ChartStore } from '@anthropic/klinecharts-pro'
-
-const store = new ChartStore(true, 'my-chart') // enabled, custom prefix
-
-// Auto-saves: theme, locale, timezone, symbol, period, indicators
-store.setTheme('dark')
-store.setSymbol({ ticker: 'BTCUSD' })
-store.getTheme() // 'dark'
-
-// Drawing persistence per symbol
-store.setDrawings('AAPL', drawingData)
-store.getDrawings('AAPL')
-
-// Alerts
-store.addAlert({ id: '1', symbol: 'AAPL', condition: 'crosses_above', price: 200 })
-store.getAlerts() // [...]
-
-// Bulk operations
-store.getAll()
-store.clear()
-```
-
----
-
-## ✏️ Drawing Store (Undo/Redo)
-
-```typescript
-import { DrawingStore, ChartStore } from '@anthropic/klinecharts-pro'
-
-const store = new ChartStore(true)
-const drawings = new DrawingStore(store)
-
-// Track actions
-drawings.pushAction({ type: 'add', overlay: myOverlay })
-
-// Undo/Redo
-if (drawings.canUndo()) drawings.undo()
-if (drawings.canRedo()) drawings.redo()
-
-// Export/Import
-const json = drawings.exportDrawings('AAPL')
-drawings.importDrawings(json)
-```
-
----
-
-## 🔔 Price Alerts
-
-```typescript
-import { evaluateAlerts } from '@anthropic/klinecharts-pro'
-
-// Evaluate on each price update
-const triggeredIds = evaluateAlerts(alerts, currentPrice, previousPrice)
-// Supports: 'crosses_above', 'crosses_below', 'reaches'
-// Automatically fires browser Notification API if permission granted
-```
-
----
-
-## 🌐 Multi-Language
-
-Built-in locales: `zh-CN`, `en-US`, `id-ID`, `ja-JP`, `ko-KR`
-
-```typescript
-import { loadLocales } from '@anthropic/klinecharts-pro'
-
-// Add a custom locale
-loadLocales('pt-BR', {
-  indicator: 'Indicador',
-  setting: 'Configuração',
-  // ... all keys
-})
-```
-
----
-
-## 🛡 Error Handling
-
-```typescript
-import { withRetry, withTimeout, ErrorManager } from '@anthropic/klinecharts-pro'
-
-// Retry with exponential backoff
-const data = await withRetry(() => fetchData(), {
-  maxAttempts: 3,
-  baseDelay: 1000,
-  onRetry: (attempt, error) => console.log(`Retry ${attempt}:`, error)
-})
-
-// Timeout wrapper
-const result = await withTimeout(somePromise, 5000, 'Request timed out')
-
-// Centralized error management
-const errMgr = new ErrorManager()
-const unsub = errMgr.onError(err => showToast(err.message))
-errMgr.report(new Error('Something went wrong'))
-unsub() // cleanup
-```
-
----
-
-## 📈 Multi-Symbol Comparison
-
-```typescript
-import { ComparisonManager } from '@anthropic/klinecharts-pro'
-
-const comparison = new ComparisonManager(chartWidget, datafeed)
-
-await comparison.addSymbol(
-  { ticker: 'MSFT' },
-  { multiplier: 1, timespan: 'day', text: 'D' },
-  fromTimestamp, toTimestamp
-)
-
-comparison.getSymbols() // [{ symbol, data, color, visible, normalizedData }]
-comparison.toggleVisibility('MSFT')
-comparison.removeSymbol('MSFT')
-comparison.destroy()
-```
-
----
-
-## 📊 DefaultDatafeed
-
-```typescript
-import { DefaultDatafeed } from '@anthropic/klinecharts-pro'
-
-const feed = new DefaultDatafeed('YOUR_POLYGON_API_KEY')
-
-// Connection monitoring
-feed.onConnectionStatusChange((status) => {
-  // 'disconnected' | 'connecting' | 'connected' | 'reconnecting'
-  console.log('WebSocket:', status)
-})
-
-// Auto-reconnect with exponential backoff (up to 5 attempts)
-// Proper cleanup
-feed.destroy()
-```
-
----
-
-## 🏗 Architecture
-
-```
-src/
-├── index.ts                # Entry point + exports
-├── KLineChartPro.tsx       # Main class (lifecycle, API)
-├── ChartProComponent.tsx   # SolidJS component
-├── types.ts                # TypeScript interfaces
-├── config.ts               # Shared constants
-├── registry.ts             # Custom tool registry (auto-menu)
-├── error.ts                # Error handling system
-├── store.ts                # localStorage persistence
-├── drawing-store.ts        # Undo/redo + drawing persistence
-├── comparison.ts           # Multi-symbol comparison
-├── bar-replay.ts           # 🆕 Bar replay engine
-├── keyboard-shortcuts.ts   # 🆕 Keyboard shortcut manager
-├── chart-template.ts       # 🆕 Template save/load
-├── crosshair-sync.ts       # 🆕 Multi-chart crosshair sync
-├── DefaultDatafeed.ts      # Polygon.io data feed
-├── i18n/                   # 5 locale files
-├── extension/              # 25 overlay templates
-│   ├── longPosition.ts     # Long Position tool
-│   ├── shortPosition.ts    # Short Position tool
-│   ├── frvp.ts             # Volume Profile
-│   ├── measure.ts          # Measure tool
-│   ├── priceRange.ts       # Price Range zone
-│   ├── textNote.ts         # Text annotation
-│   ├── anchoredVwap.ts     # 🆕 Anchored VWAP
-│   ├── priceLabel.ts       # 🆕 Price Label
-│   └── ... (17 more)
-├── widget/
-│   ├── drawing-bar/        # Drawing toolbar (8 groups)
-│   ├── replay-bar/         # 🆕 Replay controls
-│   ├── object-tree/        # 🆕 Object manager modal
-│   ├── drawing-style-editor/ # 🆕 Style editor modal
-│   ├── context-menu/       # 🆕 Right-click menu
-│   ├── error-banner/       # Error notification
-│   ├── performance-panel/  # Debug panel
-│   ├── alert-modal/        # Price alerts UI
-│   └── ...
-├── component/              # Reusable UI (Modal, Select, etc.)
-└── __tests__/              # 38 unit tests
-```
-
----
-
-## ⏯ Bar Replay
-
-```typescript
-import { BarReplayManager } from '@anthropic/klinecharts-pro'
-
-const replay = new BarReplayManager(chart, datafeed)
-
-// Set event handlers
 replay.setHandlers({
   onStep: (index, total, bar) => console.log(`${index}/${total}`),
   onPlay: () => console.log('Playing'),
@@ -495,63 +170,59 @@ replay.setHandlers({
   onStatusChange: (status) => console.log('Status:', status)
 })
 
-// Option 1: Use already-loaded chart data
 await replay.start({ dataSource: 'current', speed: 500, startFrom: 0 })
 
-// Option 2: Load custom historical data
-await replay.loadData(symbol, period, fromTimestamp, toTimestamp)
-await replay.start({ dataSource: 'custom', speed: 250 })
-
 // Controls
-replay.play()        // Auto-advance
-replay.pause()       // Pause
-replay.stepForward() // Next bar
-replay.stepBackward() // Previous bar
-replay.seekTo(50)    // Jump to index
-replay.setSpeed(100) // 100ms per bar
+replay.play()           // Auto-advance
+replay.pause()          // Pause
+replay.stepForward()    // Next bar
+replay.stepBackward()   // Previous bar
+replay.seekTo(50)       // Jump to index
+replay.setSpeed(100)    // 100ms per bar
 
 // State
-replay.getStatus()     // 'idle' | 'playing' | 'paused' | 'ended'
-replay.getIndex()      // Current position
-replay.getTotal()      // Total bars
+replay.getStatus()      // 'idle' | 'playing' | 'paused' | 'ended'
+replay.getIndex()       // Current position
+replay.getTotal()       // Total bars
 
 // Cleanup
-replay.stop()    // Restore original data
-replay.destroy() // Full cleanup
+replay.stop()           // Restore original data
+replay.destroy()        // Full cleanup
 ```
 
----
-
-## ⌨️ Keyboard Shortcuts
+### Object Tree & Style Editor
 
 ```typescript
-import { KeyboardShortcutManager } from '@anthropic/klinecharts-pro'
+// Open Object Tree modal (lists all overlays)
+chart.showObjectTree()
+
+// Open Style Editor for a specific overlay
+chart.showStyleEditor('overlay_id_123')
+```
+
+### Keyboard Shortcuts
+
+```typescript
+import { KeyboardShortcutManager } from 'klinecharts-pro'
 
 const shortcuts = new KeyboardShortcutManager(containerElement)
 
-// Register shortcuts
 shortcuts.register({ key: 'ctrl+z', description: 'Undo', callback: () => drawings.undo() })
 shortcuts.register({ key: 'ctrl+y', description: 'Redo', callback: () => drawings.redo() })
 shortcuts.register({ key: 'delete', callback: () => chart.removeOverlay() })
 shortcuts.register({ key: 'escape', callback: () => chart.removeOverlay() })
-shortcuts.register({ key: 'alt+s', callback: () => takeScreenshot() })
-shortcuts.register({ key: '1', callback: () => setPeriod('1m') })
-shortcuts.register({ key: '5', callback: () => setPeriod('5m') })
 
 // Disable during modals
 shortcuts.setEnabled(false)
 shortcuts.setEnabled(true)
 
-// Cleanup
 shortcuts.destroy()
 ```
 
----
-
-## 💾 Chart Templates
+### Chart Templates
 
 ```typescript
-import { ChartTemplateManager } from '@anthropic/klinecharts-pro'
+import { ChartTemplateManager } from 'klinecharts-pro'
 
 const templates = new ChartTemplateManager(chartStore)
 
@@ -566,30 +237,170 @@ templates.saveTemplate({
 })
 
 // List and load
-templates.getTemplateNames() // ['My Scalping Setup']
+templates.getTemplateNames()                    // ['My Scalping Setup']
 const tmpl = templates.loadTemplate('My Scalping Setup')
 
 // Delete
 templates.deleteTemplate('My Scalping Setup')
 ```
 
----
-
-## 🔗 Crosshair Sync
+### Crosshair Sync
 
 ```typescript
-import { CrosshairSyncManager } from '@anthropic/klinecharts-pro'
+import { CrosshairSyncManager } from 'klinecharts-pro'
 
 const sync = new CrosshairSyncManager()
 
-// Link multiple chart instances
 sync.addChart(chart1)
 sync.addChart(chart2)
-
-// Now moving crosshair on chart1 moves it on chart2 and vice versa
+// Moving crosshair on chart1 now moves it on chart2 and vice versa
 
 sync.removeChart(chart1)
-sync.destroy() // Unsubscribe all
+sync.destroy()
+```
+
+### Custom Indicators & Overlays
+
+```typescript
+import { registerCustomIndicator, registerCustomOverlay } from 'klinecharts-pro'
+
+// Register a custom indicator (auto-appears in Indicator menu)
+registerCustomIndicator({
+  template: { name: 'MyRSI', calc: (dataList) => { /* ... */ }, figures: [{ key: 'value', type: 'line' }] },
+  label: 'My Custom RSI',
+  paneType: 'sub'
+})
+
+// Register a custom overlay (auto-appears in Drawing menu)
+registerCustomOverlay({
+  template: { name: 'myTool', totalStep: 2, createPointFigures: (params) => { /* ... */ } },
+  label: 'My Tool'
+})
+```
+
+### Price Alerts
+
+```typescript
+chart.setAlert({ id: 'alert1', price: 150.00, condition: 'crosses_above', symbol: 'AAPL' })
+chart.getAlerts()
+chart.removeAlert('alert1')
+```
+
+### Multi-Symbol Comparison
+
+```typescript
+import { ComparisonManager } from 'klinecharts-pro'
+
+const comparison = new ComparisonManager(chartWidget, datafeed)
+await comparison.addSymbol({ ticker: 'MSFT' }, period, from, to)
+comparison.getSymbols()
+comparison.toggleVisibility('MSFT')
+comparison.removeSymbol('MSFT')
+comparison.destroy()
+```
+
+---
+
+## 📊 DefaultDatafeed
+
+```typescript
+import { DefaultDatafeed } from 'klinecharts-pro'
+
+// Uses Polygon.io API
+const datafeed = new DefaultDatafeed('YOUR_API_KEY')
+```
+
+Implements the `Datafeed` interface:
+
+```typescript
+interface Datafeed {
+  searchSymbols(search?: string): Promise<SymbolInfo[]>
+  getHistoryKLineData(symbol: SymbolInfo, period: Period, from: number, to: number): Promise<KLineData[]>
+  subscribe(symbol: SymbolInfo, period: Period, callback: DatafeedSubscribeCallback): void
+  unsubscribe(symbol: SymbolInfo, period: Period): void
+}
+```
+
+---
+
+## 🏗 Architecture
+
+```
+src/
+├── index.ts                    # Entry point + exports
+├── KLineChartPro.tsx           # Main class (lifecycle, API)
+├── ChartProComponent.tsx       # SolidJS component (all UI wiring)
+├── types.ts                    # TypeScript interfaces
+├── config.ts                   # Shared constants
+├── registry.ts                 # Custom tool registry (auto-menu)
+├── error.ts                    # Error handling system
+├── store.ts                    # localStorage persistence
+├── drawing-store.ts            # Undo/redo + drawing persistence
+├── comparison.ts               # Multi-symbol comparison
+├── bar-replay.ts               # Bar replay engine
+├── keyboard-shortcuts.ts       # Keyboard shortcut manager
+├── chart-template.ts           # Template save/load
+├── crosshair-sync.ts           # Multi-chart crosshair sync
+├── DefaultDatafeed.ts          # Polygon.io data feed
+├── i18n/                       # 5 locale files (168+ keys each)
+├── extension/                  # 25 overlay templates
+│   ├── longPosition.ts         # Long Position tool
+│   ├── shortPosition.ts        # Short Position tool
+│   ├── frvp.ts                 # Volume Profile
+│   ├── measure.ts              # Measure tool
+│   ├── priceRange.ts           # Price Range zone
+│   ├── textNote.ts             # Text annotation
+│   ├── anchoredVwap.ts         # Anchored VWAP
+│   ├── priceLabel.ts           # Price Label
+│   └── ... (17 more)
+├── widget/
+│   ├── period-bar/             # Toolbar (periods, chart type, settings)
+│   ├── drawing-bar/            # Drawing toolbar (8 groups)
+│   ├── replay-bar/             # Replay controls (play/pause/step/speed)
+│   ├── object-tree/            # Object manager modal
+│   ├── drawing-style-editor/   # Style editor modal
+│   ├── context-menu/           # Right-click menu
+│   ├── error-banner/           # Error notification
+│   ├── performance-panel/      # Debug panel
+│   ├── alert-modal/            # Price alerts UI
+│   └── ...
+├── component/                  # Reusable UI (Modal, Select, List, etc.)
+└── __tests__/                  # 38 unit tests (100% pass)
+```
+
+---
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+npx vitest run
+
+# Run with verbose output
+npx vitest run --reporter=verbose
+
+# Watch mode
+npx vitest
+```
+
+Current status: **38/38 tests passing** ✅
+
+---
+
+## 🛠 Development
+
+```bash
+# Install dependencies
+npm install
+
+# Start dev server
+npm run dev
+
+# Build for production
+npm run build-core
+
+# Run tests
+npx vitest run
 ```
 
 ---
