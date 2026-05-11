@@ -70,17 +70,69 @@ A professional-grade, TradingView-inspired charting component built on [KLineCha
 
 ## 📦 Installation
 
+### Using npm
+
 ```bash
-npm install klinecharts klinecharts-pro
+npm install klinecharts @simahfud/klinecharts-pro
 ```
 
-Or clone this repository:
+### Using unpkg or jsDelivr (CDN)
+
+The library is published as a UMD bundle, so you can load it directly via `<script>` tags:
+
+```html
+<!-- KLineChart (dependency, must be loaded first) -->
+<script src="https://unpkg.com/klinecharts/dist/klinecharts.min.js"></script>
+
+<!-- KLineChart Pro -->
+<!-- using unpkg -->
+<script src="https://unpkg.com/@simahfud/klinecharts-pro/dist/klinecharts-pro.umd.js"></script>
+<!-- OR using jsDelivr -->
+<script src="https://cdn.jsdelivr.net/npm/@simahfud/klinecharts-pro/dist/klinecharts-pro.umd.js"></script>
+
+<!-- CSS styles (required) -->
+<link rel="stylesheet" href="https://unpkg.com/@simahfud/klinecharts-pro/dist/klinecharts-pro.css" />
+```
+
+After loading, the global variable `klinechartspro` is available:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="https://unpkg.com/@simahfud/klinecharts-pro/dist/klinecharts-pro.css" />
+</head>
+<body>
+  <div id="chart-container" style="width:100%;height:600px;"></div>
+
+  <script src="https://unpkg.com/klinecharts/dist/klinecharts.min.js"></script>
+  <script src="https://unpkg.com/@simahfud/klinecharts-pro/dist/klinecharts-pro.umd.js"></script>
+  <script>
+    // Access via global: klinechartspro
+    const { KLineChartPro, DefaultDatafeed } = klinechartspro
+
+    const chart = new KLineChartPro({
+      container: document.getElementById('chart-container'),
+      symbol: { ticker: 'AAPL', name: 'Apple Inc.', market: 'stocks' },
+      period: { multiplier: 1, timespan: 'day', text: 'D' },
+      datafeed: new DefaultDatafeed('YOUR_POLYGON_API_KEY'),
+      theme: 'dark',
+      locale: 'en-US'
+    })
+  </script>
+</body>
+</html>
+```
+
+> **💡 Note**: For your fork, after running `npm run build-core`, the `dist/` folder will contain your customized UMD/ES bundles. You can self-host these files or publish to npm to use via CDN.
+
+### Building from source
 
 ```bash
 git clone https://github.com/SiMahfud/klinechartpro.git
 cd klinechartpro
 npm install
-npm run dev
+npm run build-core   # → dist/klinecharts-pro.umd.js + klinecharts-pro.js + klinecharts-pro.css
 ```
 
 ---
@@ -88,7 +140,7 @@ npm run dev
 ## 🚀 Quick Start
 
 ```typescript
-import { KLineChartPro, DefaultDatafeed } from 'klinecharts-pro'
+import { KLineChartPro, DefaultDatafeed } from '@simahfud/klinecharts-pro'
 
 const chart = new KLineChartPro({
   container: 'chart-container',
@@ -158,7 +210,7 @@ chart.stopReplay()
 **Programmatic control via `BarReplayManager`:**
 
 ```typescript
-import { BarReplayManager } from 'klinecharts-pro'
+import { BarReplayManager } from '@simahfud/klinecharts-pro'
 
 const replay = new BarReplayManager(chartWidget, datafeed)
 
@@ -203,7 +255,7 @@ chart.showStyleEditor('overlay_id_123')
 ### Keyboard Shortcuts
 
 ```typescript
-import { KeyboardShortcutManager } from 'klinecharts-pro'
+import { KeyboardShortcutManager } from '@simahfud/klinecharts-pro'
 
 const shortcuts = new KeyboardShortcutManager(containerElement)
 
@@ -222,7 +274,7 @@ shortcuts.destroy()
 ### Chart Templates
 
 ```typescript
-import { ChartTemplateManager } from 'klinecharts-pro'
+import { ChartTemplateManager } from '@simahfud/klinecharts-pro'
 
 const templates = new ChartTemplateManager(chartStore)
 
@@ -247,7 +299,7 @@ templates.deleteTemplate('My Scalping Setup')
 ### Crosshair Sync
 
 ```typescript
-import { CrosshairSyncManager } from 'klinecharts-pro'
+import { CrosshairSyncManager } from '@simahfud/klinecharts-pro'
 
 const sync = new CrosshairSyncManager()
 
@@ -262,7 +314,7 @@ sync.destroy()
 ### Custom Indicators & Overlays
 
 ```typescript
-import { registerCustomIndicator, registerCustomOverlay } from 'klinecharts-pro'
+import { registerCustomIndicator, registerCustomOverlay } from '@simahfud/klinecharts-pro'
 
 // Register a custom indicator (auto-appears in Indicator menu)
 registerCustomIndicator({
@@ -289,7 +341,7 @@ chart.removeAlert('alert1')
 ### Multi-Symbol Comparison
 
 ```typescript
-import { ComparisonManager } from 'klinecharts-pro'
+import { ComparisonManager } from '@simahfud/klinecharts-pro'
 
 const comparison = new ComparisonManager(chartWidget, datafeed)
 await comparison.addSymbol({ ticker: 'MSFT' }, period, from, to)
@@ -304,7 +356,7 @@ comparison.destroy()
 ## 📊 DefaultDatafeed
 
 ```typescript
-import { DefaultDatafeed } from 'klinecharts-pro'
+import { DefaultDatafeed } from '@simahfud/klinecharts-pro'
 
 // Uses Polygon.io API
 const datafeed = new DefaultDatafeed('YOUR_API_KEY')

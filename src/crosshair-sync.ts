@@ -42,7 +42,7 @@ export class CrosshairSyncManager {
           if (otherChart === chart) continue
           try {
             // Move crosshair on other charts to the same timestamp
-            otherChart.executeCrosshairChange?.({
+            ;(otherChart as any).executeCrosshairChange?.({
               x,
               y,
               timestamp
