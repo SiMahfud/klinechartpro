@@ -164,5 +164,7 @@
   "keyboard_shortcuts": "Pintasan Keyboard",
   "use_current_data": "Gunakan Data Saat Ini",
   "load_custom_data": "Muat Data Khusus",
-  "chart_type": "Jenis Grafik"
+  "chart_type": "Jenis Grafik",
+  "replay_select_hint": "Klik pada candle untuk menentukan titik mulai replay",
+  "goto_date": "Pergi ke Tanggal"
 }

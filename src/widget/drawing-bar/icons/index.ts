@@ -56,6 +56,10 @@ import unlock from './unlock'
 
 import remove from './remove'
 
+import longPosition from './longPosition'
+import shortPosition from './shortPosition'
+import frvp from './frvp'
+
 import type { SelectDataSourceItem } from '../../../component'
 
 import i18n from '../../../i18n'
@@ -98,10 +102,10 @@ export const mapping = {
   visible,
   invisible,
   remove,
-  // New tools use existing icon as fallback (rendered by name text)
-  longPosition: rect,
-  shortPosition: rect,
-  frvp: rect,
+  // New tools with proper icons
+  longPosition,
+  shortPosition,
+  frvp,
   measure: segment,
   priceRange: rect,
   textNote: arrow,

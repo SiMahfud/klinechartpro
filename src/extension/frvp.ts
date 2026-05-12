@@ -14,206 +14,303 @@
 
 import { OverlayTemplate } from 'klinecharts'
 
-const NUM_BINS = 30
-const VP_WIDTH_RATIO = 0.35
-const VALUE_AREA_PCT = 0.70
-
 /**
  * Fixed Range Volume Profile (FRVP) overlay.
- * User selects two points defining a time range.
- * The overlay computes a volume profile histogram over the price range,
- * identifies POC (Point of Control), VAH (Value Area High), VAL (Value Area Low),
- * and renders horizontal bars on the right side of the selection.
+ * 2 clicks to define a time range.
+ * Computes volume profile from actual chart data with POC, VAH, VAL,
+ * HVN/LVN detection, and reaction labeling.
  */
 const frvp: OverlayTemplate = {
   name: 'frvp',
   totalStep: 3,
   needDefaultPointFigure: true,
   needDefaultXAxisFigure: true,
-  needDefaultYAxisFigure: true,
-  createPointFigures: ({ coordinates, overlay, bounding }) => {
-    if (coordinates.length < 2) return []
+  needDefaultYAxisFigure: false,
+  styles: {
+    rect: { color: 'rgba(41, 98, 255, 0.25)' }
+  } as any,
 
+  createPointFigures: ({ overlay, coordinates, bounding, xAxis, yAxis }: any) => {
     const points = overlay.points
-    if (!points || points.length < 2) return []
+    if (coordinates.length < 2 || !points || points.length < 2) return []
+    if (points[0].dataIndex === undefined || points[1].dataIndex === undefined) return []
 
-    const price0 = points[0].value ?? 0
-    const price1 = points[1].value ?? 0
-    const highPrice = Math.max(price0, price1)
-    const lowPrice = Math.min(price0, price1)
-    const priceRange = highPrice - lowPrice
+    const idx1 = Math.min(points[0].dataIndex, points[1].dataIndex)
+    const idx2 = Math.max(points[0].dataIndex, points[1].dataIndex)
 
-    if (priceRange <= 0) return []
+    // Try to get chart instance for data access
+    const chart = (overlay as any)._bindingChart || (window as any)._klineChartInstance
+    if (!chart) return []
 
-    const top = Math.min(coordinates[0].y, coordinates[1].y)
-    const bottom = Math.max(coordinates[0].y, coordinates[1].y)
-    const left = Math.min(coordinates[0].x, coordinates[1].x)
-    const right = Math.max(coordinates[0].x, coordinates[1].x)
-    const height = bottom - top
+    const dataList = chart.getDataList()
+    if (!dataList || dataList.length === 0) return []
 
-    if (height <= 0) return []
+    const startIdx = Math.max(0, idx1)
+    const endIdx = Math.min(dataList.length - 1, idx2)
+    if (startIdx >= endIdx) return []
 
-    // Build volume bins from candle data embedded in the overlay
-    // Since we can't access raw KLineData from overlay, we create
-    // a visual-only profile based on the price range geometry
-    const binHeight = height / NUM_BINS
-    const vpWidth = Math.min((right - left) * VP_WIDTH_RATIO, bounding.width * 0.3)
+    let rangeHigh = -Infinity
+    let rangeLow = Infinity
+    let totalVolume = 0
 
-    // Generate a bell-curve-like distribution for visual demonstration
-    // In real usage, the user should populate overlay.extendData with actual volume data
-    const bins: number[] = []
+    for (let i = startIdx; i <= endIdx; i++) {
+      const bar = dataList[i]
+      if (bar.high > rangeHigh) rangeHigh = bar.high
+      if (bar.low < rangeLow) rangeLow = bar.low
+      totalVolume += (bar.volume || 0)
+    }
+
+    if (rangeHigh <= rangeLow || totalVolume === 0) return []
+
+    const NUM_BUCKETS = 40
+    const bucketSize = (rangeHigh - rangeLow) / NUM_BUCKETS
+    const buckets = new Array(NUM_BUCKETS).fill(0)
+
+    for (let i = startIdx; i <= endIdx; i++) {
+      const bar = dataList[i]
+      const vol = bar.volume || 0
+      if (vol === 0) continue
+
+      const barBucketLow = Math.floor((bar.low - rangeLow) / bucketSize)
+      const barBucketHigh = Math.floor((bar.high - rangeLow) / bucketSize)
+      const span = Math.max(1, barBucketHigh - barBucketLow + 1)
+      const volPerBucket = vol / span
+
+      for (let b = Math.max(0, barBucketLow); b <= Math.min(NUM_BUCKETS - 1, barBucketHigh); b++) {
+        buckets[b] += volPerBucket
+      }
+    }
+
     let maxVol = 0
-    const extData = overlay.extendData as number[] | undefined
-
-    if (extData && extData.length === NUM_BINS) {
-      for (let i = 0; i < NUM_BINS; i++) {
-        bins.push(extData[i])
-        if (extData[i] > maxVol) maxVol = extData[i]
-      }
-    } else {
-      // Default bell curve distribution
-      const mid = NUM_BINS / 2
-      for (let i = 0; i < NUM_BINS; i++) {
-        const dist = Math.abs(i - mid) / mid
-        const vol = Math.exp(-dist * dist * 3) * 100 + Math.random() * 20
-        bins.push(vol)
-        if (vol > maxVol) maxVol = vol
+    let pocIndex = 0
+    for (let b = 0; b < NUM_BUCKETS; b++) {
+      if (buckets[b] > maxVol) {
+        maxVol = buckets[b]
+        pocIndex = b
       }
     }
 
-    // Find POC (highest volume bin)
-    let pocIdx = 0
-    for (let i = 1; i < NUM_BINS; i++) {
-      if (bins[i] > bins[pocIdx]) pocIdx = i
-    }
-
-    // Calculate Value Area (70% of total volume centered on POC)
-    const totalVol = bins.reduce((a, b) => a + b, 0)
-    const targetVol = totalVol * VALUE_AREA_PCT
-    let vaLow = pocIdx
-    let vaHigh = pocIdx
-    let accVol = bins[pocIdx]
-
-    while (accVol < targetVol && (vaLow > 0 || vaHigh < NUM_BINS - 1)) {
-      const addLow = vaLow > 0 ? bins[vaLow - 1] : 0
-      const addHigh = vaHigh < NUM_BINS - 1 ? bins[vaHigh + 1] : 0
-      if (addLow >= addHigh && vaLow > 0) {
+    const vaThreshold = totalVolume * 0.70
+    let vaVolume = buckets[pocIndex]
+    let vaLow = pocIndex
+    let vaHigh = pocIndex
+    while (vaVolume < vaThreshold && (vaLow > 0 || vaHigh < NUM_BUCKETS - 1)) {
+      const expandLow = vaLow > 0 ? buckets[vaLow - 1] : 0
+      const expandHigh = vaHigh < NUM_BUCKETS - 1 ? buckets[vaHigh + 1] : 0
+      if (expandLow >= expandHigh && vaLow > 0) {
         vaLow--
-        accVol += addLow
-      } else if (vaHigh < NUM_BINS - 1) {
+        vaVolume += buckets[vaLow]
+      } else if (vaHigh < NUM_BUCKETS - 1) {
         vaHigh++
-        accVol += addHigh
+        vaVolume += buckets[vaHigh]
       } else {
         vaLow--
-        accVol += addLow
+        vaVolume += buckets[vaLow]
       }
     }
 
+    const x1 = Math.min(coordinates[0].x, coordinates[1].x)
+    const x2 = Math.max(coordinates[0].x, coordinates[1].x)
+    const rangeWidth = x2 - x1
+    const maxBarWidth = rangeWidth * 0.4
     const figures: any[] = []
 
-    // Selection box outline
-    figures.push({
-      type: 'line',
-      attrs: [
-        { coordinates: [{ x: left, y: top }, { x: right, y: top }] },
-        { coordinates: [{ x: right, y: top }, { x: right, y: bottom }] },
-        { coordinates: [{ x: right, y: bottom }, { x: left, y: bottom }] },
-        { coordinates: [{ x: left, y: bottom }, { x: left, y: top }] }
-      ],
-      styles: { style: 'dashed', color: 'rgba(150, 150, 150, 0.5)', size: 1 }
-    })
+    // HVN and LVN detection
+    const hvnThreshold = maxVol * 0.80
+    const lvnThreshold = maxVol * 0.15
+    const lvnNeighborMin = maxVol * 0.30
+    const hvnBuckets: number[] = []
+    const lvnBuckets: number[] = []
 
-    // Volume bars
-    for (let i = 0; i < NUM_BINS; i++) {
-      const barWidth = maxVol > 0 ? (bins[i] / maxVol) * vpWidth : 0
-      const barTop = top + i * binHeight
-      const barBottom = barTop + binHeight - 1
-
-      let color: string
-      if (i === pocIdx) {
-        color = 'rgba(255, 193, 7, 0.6)' // POC — yellow
-      } else if (i >= vaLow && i <= vaHigh) {
-        color = 'rgba(33, 150, 243, 0.35)' // Value Area — blue
-      } else {
-        color = 'rgba(150, 150, 150, 0.2)' // Outside VA — gray
+    const keyBuckets = new Set([pocIndex, vaHigh, vaLow])
+    const isNearKey = (b: number) => {
+      for (const kb of keyBuckets) {
+        if (Math.abs(b - kb) <= 2) return true
       }
+      return false
+    }
+
+    for (let b = 0; b < NUM_BUCKETS; b++) {
+      if (buckets[b] >= hvnThreshold && b !== pocIndex && !isNearKey(b)) {
+        hvnBuckets.push(b)
+      }
+    }
+
+    for (let b = 1; b < NUM_BUCKETS - 1; b++) {
+      if (isNearKey(b)) continue
+      if (buckets[b] < lvnThreshold &&
+        buckets[b] < buckets[b - 1] &&
+        buckets[b] < buckets[b + 1] &&
+        buckets[b - 1] > lvnNeighborMin &&
+        buckets[b + 1] > lvnNeighborMin) {
+        lvnBuckets.push(b)
+      }
+    }
+
+    hvnBuckets.sort((a, b2) => buckets[b2] - buckets[a])
+    hvnBuckets.splice(3)
+    lvnBuckets.sort((a, b2) => buckets[a] - buckets[b2])
+    lvnBuckets.splice(3)
+
+    // Draw volume histogram bars
+    for (let b = 0; b < NUM_BUCKETS; b++) {
+      if (buckets[b] === 0) continue
+
+      const priceLow = rangeLow + b * bucketSize
+      const priceHigh = rangeLow + (b + 1) * bucketSize
+      const yTop = yAxis.convertToPixel(priceHigh)
+      const yBottom = yAxis.convertToPixel(priceLow)
+      const barWidth = (buckets[b] / maxVol) * maxBarWidth
+      const isValueArea = b >= vaLow && b <= vaHigh
+      const isPOC = b === pocIndex
+      const isHVN = hvnBuckets.includes(b)
+
+      let fillColor: string
+      if (isPOC) fillColor = 'rgba(255, 235, 59, 0.55)'
+      else if (isHVN) fillColor = 'rgba(255, 152, 0, 0.40)'
+      else if (isValueArea) fillColor = 'rgba(41, 98, 255, 0.35)'
+      else fillColor = 'rgba(120, 123, 134, 0.20)'
 
       figures.push({
-        type: 'polygon',
-        ignoreEvent: true,
+        type: 'rect',
         attrs: {
-          coordinates: [
-            { x: right, y: barTop },
-            { x: right + barWidth, y: barTop },
-            { x: right + barWidth, y: barBottom },
-            { x: right, y: barBottom }
-          ]
+          x: x1,
+          y: Math.min(yTop, yBottom),
+          width: barWidth,
+          height: Math.abs(yBottom - yTop) - 1
         },
-        styles: { style: 'fill', color }
+        styles: {
+          style: 'fill',
+          color: fillColor,
+          borderColor: isPOC ? 'rgba(255, 235, 59, 0.8)' : 'transparent',
+          borderSize: isPOC ? 1 : 0
+        }
       })
     }
 
-    // POC line
-    const pocY = top + pocIdx * binHeight + binHeight / 2
+    // Label measurement helper
+    const measureText = (text: string, size: number) => {
+      return text.length * size * 0.58
+    }
+
+    // POC, VAH, VAL Labels with anti-overlap
+    const pocPrice = rangeLow + (pocIndex + 0.5) * bucketSize
+    const pocY = yAxis.convertToPixel(pocPrice)
+    const pocText = `POC ${pocPrice.toFixed(5)}`
+    const pocLabelW = measureText(pocText, 10) + 10
+
+    const vaHighPrice = rangeLow + (vaHigh + 1) * bucketSize
+    const vaLowPrice = rangeLow + vaLow * bucketSize
+    const vaHighY = yAxis.convertToPixel(vaHighPrice)
+    const vaLowY = yAxis.convertToPixel(vaLowPrice)
+
+    const vahText = `VAH ${vaHighPrice.toFixed(5)}`
+    const vahLabelW = measureText(vahText, 10) + 10
+    const valText = `VAL ${vaLowPrice.toFixed(5)}`
+    const valLabelW = measureText(valText, 10) + 10
+
+    // Anti-overlap logic
+    const labelEntries = [
+      { id: 'vah', y: vaHighY, text: vahText, w: vahLabelW, bg: 'rgba(41, 98, 255, 0.85)', fg: '#ffffff', weight: '600', size: 10 },
+      { id: 'poc', y: pocY, text: pocText, w: pocLabelW, bg: '#ffeb3b', fg: '#000000', weight: '700', size: 10 },
+      { id: 'val', y: vaLowY, text: valText, w: valLabelW, bg: 'rgba(41, 98, 255, 0.85)', fg: '#ffffff', weight: '600', size: 10 }
+    ]
+    labelEntries.sort((a, b) => a.y - b.y)
+    const minLabelSpacing = 16
+    for (let li = 1; li < labelEntries.length; li++) {
+      if (labelEntries[li].y - labelEntries[li - 1].y < minLabelSpacing) {
+        labelEntries[li].y = labelEntries[li - 1].y + minLabelSpacing
+      }
+    }
+
+    // POC Line
     figures.push({
       type: 'line',
-      attrs: {
-        coordinates: [
-          { x: left, y: pocY },
-          { x: right + vpWidth, y: pocY }
-        ]
-      },
-      styles: { color: '#FFC107', size: 1.5 }
+      attrs: { coordinates: [{ x: x1, y: pocY }, { x: x2, y: pocY }] },
+      styles: { style: 'dashed', color: 'rgba(255, 235, 59, 0.9)', size: 1.5, dashedValue: [6, 3] }
     })
 
-    // POC label
-    figures.push({
-      type: 'text',
-      ignoreEvent: true,
-      attrs: { x: right + vpWidth + 4, y: pocY + 4, text: 'POC' },
-      styles: { color: '#FFC107', size: 10 }
-    })
-
-    // VAH line
-    const vahY = top + vaHigh * binHeight
+    // VAH Line
     figures.push({
       type: 'line',
-      attrs: {
-        coordinates: [
-          { x: right, y: vahY },
-          { x: right + vpWidth, y: vahY }
-        ]
-      },
-      styles: { color: '#2196F3', size: 1, style: 'dashed' }
+      attrs: { coordinates: [{ x: x1, y: vaHighY }, { x: x2, y: vaHighY }] },
+      styles: { style: 'dashed', color: 'rgba(41, 98, 255, 0.8)', size: 1.5, dashedValue: [5, 3] }
     })
 
-    // VAH label
-    figures.push({
-      type: 'text',
-      ignoreEvent: true,
-      attrs: { x: right + vpWidth + 4, y: vahY + 4, text: 'VAH' },
-      styles: { color: '#2196F3', size: 10 }
-    })
-
-    // VAL line
-    const valY = top + (vaLow + 1) * binHeight
+    // VAL Line
     figures.push({
       type: 'line',
-      attrs: {
-        coordinates: [
-          { x: right, y: valY },
-          { x: right + vpWidth, y: valY }
-        ]
-      },
-      styles: { color: '#2196F3', size: 1, style: 'dashed' }
+      attrs: { coordinates: [{ x: x1, y: vaLowY }, { x: x2, y: vaLowY }] },
+      styles: { style: 'dashed', color: 'rgba(41, 98, 255, 0.8)', size: 1.5, dashedValue: [5, 3] }
     })
 
-    // VAL label
+    // Draw labels
+    for (const lbl of labelEntries) {
+      figures.push({
+        type: 'text',
+        attrs: { x: x1 - lbl.w - 6, y: lbl.y, text: lbl.text },
+        styles: {
+          color: lbl.fg, size: lbl.size, family: 'Inter, sans-serif', weight: lbl.weight,
+          backgroundColor: lbl.bg, paddingLeft: 4, paddingRight: 4,
+          paddingTop: 2, paddingBottom: 2, borderRadius: 2
+        }
+      })
+    }
+
+    // HVN Labels
+    for (const b of hvnBuckets) {
+      const hvnPrice = rangeLow + (b + 0.5) * bucketSize
+      const hvnY = yAxis.convertToPixel(hvnPrice)
+      const barEndX = x1 + (buckets[b] / maxVol) * maxBarWidth
+
+      figures.push({
+        type: 'line',
+        attrs: { coordinates: [{ x: x1, y: hvnY }, { x: barEndX, y: hvnY }] },
+        styles: { style: 'dashed', color: 'rgba(255, 152, 0, 0.5)', size: 1, dashedValue: [2, 2] }
+      })
+      figures.push({
+        type: 'text',
+        attrs: { x: barEndX + 3, y: hvnY, text: 'HVN' },
+        styles: {
+          color: '#ffffff', size: 9, family: 'Inter, sans-serif', weight: '600',
+          backgroundColor: 'rgba(255, 152, 0, 0.75)', paddingLeft: 3, paddingRight: 3,
+          paddingTop: 1, paddingBottom: 1, borderRadius: 2
+        }
+      })
+    }
+
+    // LVN Labels
+    for (const b of lvnBuckets) {
+      const lvnPrice = rangeLow + (b + 0.5) * bucketSize
+      const lvnY = yAxis.convertToPixel(lvnPrice)
+      const barEndX = x1 + Math.max(4, (buckets[b] / maxVol) * maxBarWidth)
+
+      figures.push({
+        type: 'line',
+        attrs: { coordinates: [{ x: x1, y: lvnY }, { x: x2, y: lvnY }] },
+        styles: { style: 'dashed', color: 'rgba(156, 39, 176, 0.35)', size: 1, dashedValue: [2, 4] }
+      })
+      figures.push({
+        type: 'text',
+        attrs: { x: barEndX + 3, y: lvnY, text: 'LVN' },
+        styles: {
+          color: '#ffffff', size: 9, family: 'Inter, sans-serif', weight: '600',
+          backgroundColor: 'rgba(156, 39, 176, 0.7)', paddingLeft: 3, paddingRight: 3,
+          paddingTop: 1, paddingBottom: 1, borderRadius: 2
+        }
+      })
+    }
+
+    // Range boundary lines
     figures.push({
-      type: 'text',
-      ignoreEvent: true,
-      attrs: { x: right + vpWidth + 4, y: valY + 4, text: 'VAL' },
-      styles: { color: '#2196F3', size: 10 }
+      type: 'line',
+      attrs: { coordinates: [{ x: x1, y: yAxis.convertToPixel(rangeHigh) }, { x: x1, y: yAxis.convertToPixel(rangeLow) }] },
+      styles: { color: 'rgba(120, 123, 134, 0.4)', size: 1 }
+    })
+    figures.push({
+      type: 'line',
+      attrs: { coordinates: [{ x: x2, y: yAxis.convertToPixel(rangeHigh) }, { x: x2, y: yAxis.convertToPixel(rangeLow) }] },
+      styles: { color: 'rgba(120, 123, 134, 0.4)', size: 1 }
     })
 
     return figures

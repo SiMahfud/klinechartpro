@@ -16,133 +16,227 @@ import { OverlayTemplate } from 'klinecharts'
 
 /**
  * Short Position overlay — TradingView style.
- * User places two points: Entry (point 0) and Target/Stop (point 1).
- * Draws entry line, take profit zone (green below), stop loss zone (red above),
- * and labels showing the risk/reward ratio.
+ * 3 clicks: Entry, TP, SL. Gradient fills, pips calculation, R:R summary.
  */
 const shortPosition: OverlayTemplate = {
   name: 'shortPosition',
-  totalStep: 3,
+  totalStep: 4, // 4 = 3 clicks (Entry, TP, SL)
   needDefaultPointFigure: true,
-  needDefaultXAxisFigure: true,
+  needDefaultXAxisFigure: false,
   needDefaultYAxisFigure: true,
-  createPointFigures: ({ coordinates, overlay }) => {
-    if (coordinates.length < 2) return []
 
-    const points = overlay.points
-    if (!points || points.length < 2) return []
-
-    const entryPrice = points[0].value ?? 0
-    const targetPrice = points[1].value ?? 0
-
-    // For short: TP is below entry, SL is above (mirrored distance)
-    const diff = Math.abs(targetPrice - entryPrice)
-    const isTargetBelow = targetPrice < entryPrice
-
-    const tpY = isTargetBelow ? coordinates[1].y : coordinates[0].y + (coordinates[0].y - coordinates[1].y)
-    const slY = isTargetBelow ? coordinates[0].y - (coordinates[1].y - coordinates[0].y) : coordinates[1].y
+  createPointFigures: ({ overlay, coordinates }) => {
+    const n = coordinates.length
+    if (n === 0) return []
 
     const entryY = coordinates[0].y
-    const left = Math.min(coordinates[0].x, coordinates[1].x)
-    const right = Math.max(coordinates[0].x, coordinates[1].x)
-    const width = Math.max(right - left, 120)
+    const entryX = coordinates[0].x
+    const left = entryX
 
-    const rr = diff > 0 ? 1 : 0
+    let right = entryX + 150
+    if (n > 1) {
+      right = Math.max(entryX + 20, coordinates[1].x)
+    }
 
-    return [
-      // Entry line
-      {
-        type: 'line',
-        attrs: {
-          coordinates: [
-            { x: left, y: entryY },
-            { x: left + width, y: entryY }
-          ]
-        },
-        styles: { color: '#EF5350', size: 2 }
-      },
-      // Take Profit zone (green, below entry for short)
-      {
+    const figures: any[] = []
+    const entryPrice = overlay.points[0]?.value
+    const precision = (() => {
+      const str = entryPrice?.toString() || ''
+      const decPart = str.split('.')[1] || ''
+      return Math.min(5, Math.max(2, decPart.length))
+    })()
+    const pipFactor = precision >= 4 ? Math.pow(10, precision - 1) : 100
+
+    // Entry line
+    figures.push({
+      type: 'line',
+      attrs: { coordinates: [{ x: left, y: entryY }, { x: right, y: entryY }] },
+      styles: { color: '#e040fb', size: 2 }
+    })
+    if (entryPrice !== undefined) {
+      figures.push({
+        type: 'text',
+        attrs: { x: left + 10, y: entryY + 4, text: `SHORT  Entry ${entryPrice.toFixed(precision)}` },
+        styles: {
+          color: '#ffffff', size: 11, family: 'Inter, sans-serif', weight: '700',
+          backgroundColor: 'rgba(224, 64, 251, 0.85)', paddingLeft: 6, paddingRight: 6,
+          paddingTop: 3, paddingBottom: 3, borderRadius: 3
+        }
+      })
+    }
+
+    if (n === 1) return figures
+
+    // TP Zone (below for short)
+    if (n >= 2) {
+      const tpY = coordinates[1].y
+      const tpPrice = overlay.points[1]?.value
+
+      figures.push({
         type: 'polygon',
-        ignoreEvent: true,
         attrs: {
           coordinates: [
-            { x: left, y: entryY },
-            { x: left + width, y: entryY },
-            { x: left + width, y: tpY },
-            { x: left, y: tpY }
+            { x: left, y: entryY }, { x: right, y: entryY },
+            { x: right, y: tpY }, { x: left, y: tpY }
           ]
         },
-        styles: { style: 'fill', color: 'rgba(38, 166, 91, 0.2)' }
-      },
-      // Take Profit border
-      {
+        styles: { style: 'fill', color: 'rgba(8, 153, 129, 0.15)' }
+      })
+      figures.push({
         type: 'line',
-        attrs: {
-          coordinates: [
-            { x: left, y: tpY },
-            { x: left + width, y: tpY }
-          ]
-        },
-        styles: { color: '#26A65B', size: 1, style: 'dashed' }
-      },
-      // Stop Loss zone (red, above entry for short)
-      {
-        type: 'polygon',
-        ignoreEvent: true,
-        attrs: {
-          coordinates: [
-            { x: left, y: entryY },
-            { x: left + width, y: entryY },
-            { x: left + width, y: slY },
-            { x: left, y: slY }
-          ]
-        },
-        styles: { style: 'fill', color: 'rgba(239, 83, 80, 0.2)' }
-      },
-      // Stop Loss border
-      {
-        type: 'line',
-        attrs: {
-          coordinates: [
-            { x: left, y: slY },
-            { x: left + width, y: slY }
-          ]
-        },
-        styles: { color: '#EF5350', size: 1, style: 'dashed' }
-      },
-      // Labels
-      {
-        type: 'text',
-        ignoreEvent: true,
-        attrs: {
-          x: left + 4,
-          y: entryY - 4,
-          text: `SHORT Entry: ${entryPrice.toFixed(2)}`
-        },
-        styles: { color: '#EF5350', size: 11 }
-      },
-      {
-        type: 'text',
-        ignoreEvent: true,
-        attrs: {
-          x: left + 4,
-          y: tpY - 4,
-          text: `TP: ${(isTargetBelow ? targetPrice : entryPrice - diff).toFixed(2)} (R:R 1:${rr.toFixed(1)})`
-        },
-        styles: { color: '#26A65B', size: 11 }
-      },
-      {
-        type: 'text',
-        ignoreEvent: true,
-        attrs: {
-          x: left + 4,
-          y: slY + 14,
-          text: `SL: ${(isTargetBelow ? entryPrice + diff : targetPrice).toFixed(2)}`
-        },
-        styles: { color: '#EF5350', size: 11 }
+        attrs: { coordinates: [{ x: left, y: tpY }, { x: right, y: tpY }] },
+        styles: { color: '#089981', size: 1.5, style: 'dashed', dashedValue: [5, 3] }
+      })
+
+      if (tpPrice !== undefined && entryPrice !== undefined) {
+        const rawTpPips = (entryPrice - tpPrice) * pipFactor
+        const tpPips = Math.abs(rawTpPips)
+        const tpPct = Math.abs((entryPrice - tpPrice) / entryPrice * 100)
+        const tpSign = rawTpPips >= 0 ? '+' : '-'
+        const tpMidY = (entryY + tpY) / 2
+
+        figures.push({
+          type: 'text',
+          attrs: { x: left + 10, y: tpY + 4, text: `TP ${tpPrice.toFixed(precision)}` },
+          styles: {
+            color: '#ffffff', size: 11, family: 'Inter, sans-serif', weight: '700',
+            backgroundColor: 'rgba(8, 153, 129, 0.85)', paddingLeft: 6, paddingRight: 6,
+            paddingTop: 3, paddingBottom: 3, borderRadius: 3
+          }
+        })
+        figures.push({
+          type: 'text',
+          ignoreEvent: true,
+          attrs: { x: left + 10, y: tpMidY - 6, text: `${tpSign}${tpPips.toFixed(1)} pips (${tpSign}${tpPct.toFixed(2)}%)` },
+          styles: { color: '#ffffff', size: 12, family: 'Inter, sans-serif', weight: '600' }
+        })
       }
-    ]
+    }
+
+    // SL Zone (above for short)
+    if (n >= 3) {
+      const slY = coordinates[2].y
+      const slPrice = overlay.points[2]?.value
+
+      figures.push({
+        type: 'polygon',
+        attrs: {
+          coordinates: [
+            { x: left, y: entryY }, { x: right, y: entryY },
+            { x: right, y: slY }, { x: left, y: slY }
+          ]
+        },
+        styles: { style: 'fill', color: 'rgba(242, 54, 69, 0.15)' }
+      })
+      figures.push({
+        type: 'line',
+        attrs: { coordinates: [{ x: left, y: slY }, { x: right, y: slY }] },
+        styles: { color: '#f23645', size: 1.5, style: 'dashed', dashedValue: [5, 3] }
+      })
+
+      if (slPrice !== undefined && entryPrice !== undefined) {
+        const rawSlPips = (entryPrice - slPrice) * pipFactor
+        const slPips = Math.abs(rawSlPips)
+        const slPct = Math.abs((entryPrice - slPrice) / entryPrice * 100)
+        const slSign = rawSlPips >= 0 ? '+' : '-'
+        const slMidY = (entryY + slY) / 2
+
+        figures.push({
+          type: 'text',
+          attrs: { x: left + 10, y: slY + 4, text: `SL ${slPrice.toFixed(precision)}` },
+          styles: {
+            color: '#ffffff', size: 11, family: 'Inter, sans-serif', weight: '700',
+            backgroundColor: 'rgba(242, 54, 69, 0.85)', paddingLeft: 6, paddingRight: 6,
+            paddingTop: 3, paddingBottom: 3, borderRadius: 3
+          }
+        })
+        figures.push({
+          type: 'text',
+          ignoreEvent: true,
+          attrs: { x: left + 10, y: slMidY - 6, text: `${slSign}${slPips.toFixed(1)} pips (${slSign}${slPct.toFixed(2)}%)` },
+          styles: { color: '#ffffff', size: 12, family: 'Inter, sans-serif', weight: '600' }
+        })
+
+        // R:R Summary Box at bottom-right (for short)
+        if (overlay.points[1]?.value !== undefined) {
+          const tpPrice = overlay.points[1].value
+          const risk = Math.abs(slPrice - entryPrice)
+          const reward = Math.abs(entryPrice - tpPrice)
+          const rr = risk > 0 ? (reward / risk).toFixed(2) : '∞'
+
+          const rawTpPips = (entryPrice - tpPrice) * pipFactor
+          const tpPipsText = Math.abs(rawTpPips).toFixed(1)
+
+          const textInfo = `R:R 1:${rr}  |  Risk: ${slPips.toFixed(1)}p  |  Reward: ${tpPipsText}p`
+
+          figures.push({
+            type: 'text',
+            ignoreEvent: true,
+            attrs: { x: right - 8, y: Math.max(entryY, coordinates[1].y) + 10, text: textInfo, align: 'right', baseline: 'top' },
+            styles: {
+              color: '#ffffff', size: 11, family: 'Inter, sans-serif', weight: '700',
+              backgroundColor: 'rgba(224, 64, 251, 0.90)', paddingLeft: 8, paddingRight: 8,
+              paddingTop: 4, paddingBottom: 4, borderRadius: 3
+            }
+          })
+        }
+      }
+    }
+
+    return figures
+  },
+
+  performEventMoveForDrawing: ({ currentStep, points, performPoint }: any) => {
+    if (currentStep === 2) {
+      if (points[1]) {
+        points[1].dataIndex = performPoint.dataIndex
+        if (performPoint.timestamp) points[1].timestamp = performPoint.timestamp
+        points[1].value = performPoint.value
+      }
+    } else if (currentStep === 3) {
+      if (points[2]) {
+        if (points[1]) {
+          points[2].dataIndex = points[1].dataIndex
+          if (points[1].timestamp) points[2].timestamp = points[1].timestamp
+        }
+        points[2].value = performPoint.value
+      }
+    }
+  },
+
+  performEventPressedMove: ({ points, performPointIndex, performPoint }: any) => {
+    if (performPointIndex === 1 || performPointIndex === 2) {
+      if (points[performPointIndex]) {
+        points[performPointIndex].value = performPoint.value
+      }
+      if (points[1]) {
+        points[1].dataIndex = performPoint.dataIndex
+        if (performPoint.timestamp) points[1].timestamp = performPoint.timestamp
+      }
+      if (points[2]) {
+        points[2].dataIndex = performPoint.dataIndex
+        if (performPoint.timestamp) points[2].timestamp = performPoint.timestamp
+      }
+    } else if (performPointIndex === 0 && points[0]) {
+      const diffVal = performPoint.value - points[0].value
+      const diffIndex = performPoint.dataIndex - (points[0].dataIndex || 0)
+      const diffTime = (performPoint.timestamp || 0) - (points[0].timestamp || 0)
+
+      points[0].value = performPoint.value
+      points[0].dataIndex = performPoint.dataIndex
+      if (performPoint.timestamp) points[0].timestamp = performPoint.timestamp
+
+      if (points[1]) {
+        points[1].value += diffVal
+        if (points[1].dataIndex !== undefined) points[1].dataIndex += diffIndex
+        if (points[1].timestamp !== undefined) points[1].timestamp += diffTime
+      }
+      if (points[2]) {
+        points[2].value += diffVal
+        if (points[2].dataIndex !== undefined) points[2].dataIndex += diffIndex
+        if (points[2].timestamp !== undefined) points[2].timestamp += diffTime
+      }
+    }
   }
 }
 

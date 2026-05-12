@@ -164,5 +164,7 @@
   "keyboard_shortcuts": "Keyboard Shortcuts",
   "use_current_data": "Use Current Data",
   "load_custom_data": "Load Custom Data",
-  "chart_type": "Chart Type"
+  "chart_type": "Chart Type",
+  "replay_select_hint": "Click on a candle to set replay start point",
+  "goto_date": "Go to Date"
 }

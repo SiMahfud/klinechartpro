@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-import { createSignal, createEffect, onMount, Show, onCleanup, startTransition, Component } from 'solid-js'
+import { createSignal, createEffect, onMount, Show, onCleanup, startTransition, Component, on, untrack } from 'solid-js'
 
 import {
   init, dispose, utils, Nullable, Chart, OverlayMode, Styles,
@@ -25,6 +25,7 @@ import lodashSet from 'lodash/set'
 import lodashClone from 'lodash/cloneDeep'
 
 import { SelectDataSourceItem, Loading } from './component'
+import { ChartStore } from './store'
 
 import {
   PeriodBar, DrawingBar, IndicatorModal, TimezoneModal, SettingModal,
@@ -32,6 +33,8 @@ import {
 } from './widget'
 
 import ReplayBar from './widget/replay-bar'
+import ReplayOverlay from './widget/replay-overlay'
+import BottomBar from './widget/bottom-bar'
 import ObjectTree from './widget/object-tree'
 import type { OverlayItem } from './widget/object-tree'
 import DrawingStyleEditor from './widget/drawing-style-editor'
@@ -56,12 +59,13 @@ interface PrevSymbolPeriod {
   period: Period
 }
 
-function createIndicator (widget: Nullable<Chart>, indicatorName: string, isStack?: boolean, paneOptions?: PaneOptions): Nullable<string> {
+function createIndicator (widget: Nullable<Chart>, indicatorName: string, isStack?: boolean, paneOptions?: PaneOptions, precision?: number): Nullable<string> {
   if (indicatorName === 'VOL') {
     paneOptions = { gap: { bottom: 2 }, ...paneOptions }
   }
   return widget?.createIndicator({
     name: indicatorName,
+    precision,
     // @ts-expect-error
     createTooltipDataSource: ({ indicator, defaultStyles }) => {
       const icons = []
@@ -84,21 +88,27 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
   let widget: Nullable<Chart> = null
 
   let priceUnitDom: HTMLElement
+  const store = new ChartStore(props.persistence.enabled, props.persistence.prefix)
+
+  let dataGeneration = 0  // Incremented on every symbol/period change to invalidate stale loadMore requests
 
   const [loading, setLoading] = createSignal(false)
 
-  const [theme, setTheme] = createSignal(props.theme)
-  const [styles, setStyles] = createSignal(props.styles)
-  const [locale, setLocale] = createSignal(props.locale)
+  const [theme, setTheme] = createSignal(store.getTheme() ?? props.theme)
+  const [styles, setStyles] = createSignal(store.getStyles() ?? props.styles)
+  const [locale, setLocale] = createSignal(store.getLocale() ?? props.locale)
 
-  const [symbol, setSymbol] = createSignal(props.symbol)
-  const [period, setPeriod] = createSignal(props.period)
+  const [symbol, setSymbol] = createSignal(store.getSymbol() ?? props.symbol)
+  const [period, setPeriod] = createSignal(store.getPeriod() ?? props.period)
   const [indicatorModalVisible, setIndicatorModalVisible] = createSignal(false)
-  const [mainIndicators, setMainIndicators] = createSignal([...(props.mainIndicators!)])
-  const [subIndicators, setSubIndicators] = createSignal<Record<string, string>>({})
+  const [mainIndicators, setMainIndicators] = createSignal(store.getMainIndicators() ?? [...(props.mainIndicators!)])
+  const [subIndicators, setSubIndicators] = createSignal<Record<string, string>>(store.getSubIndicators() ?? {})
 
   const [timezoneModalVisible, setTimezoneModalVisible] = createSignal(false)
-  const [timezone, setTimezone] = createSignal<SelectDataSourceItem>({ key: props.timezone, text: translateTimezone(props.timezone, props.locale) })
+  const [timezone, setTimezone] = createSignal<SelectDataSourceItem>({ 
+    key: store.getTimezone() ?? props.timezone, 
+    text: translateTimezone(store.getTimezone() ?? props.timezone, store.getLocale() ?? props.locale) 
+  })
 
   const [settingModalVisible, setSettingModalVisible] = createSignal(false)
   const [widgetDefaultStyles, setWidgetDefaultStyles] = createSignal<Styles>()
@@ -120,11 +130,15 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
 
   // Replay
   const [replayActive, setReplayActive] = createSignal(false)
+  const [replaySelecting, setReplaySelecting] = createSignal(false)
+  const [replayCrosshairX, setReplayCrosshairX] = createSignal(0)
+  const [replayCrosshairVisible, setReplayCrosshairVisible] = createSignal(false)
   const [replayStatus, setReplayStatus] = createSignal<string>('idle')
   const [replayIndex, setReplayIndex] = createSignal(0)
   const [replayTotal, setReplayTotal] = createSignal(0)
   const [replaySpeed, setReplaySpeed] = createSignal(500)
   let replayManager: BarReplayManager | null = null
+  let replaySelectCleanup: (() => void) | null = null
 
   // Object Tree
   const [objectTreeVisible, setObjectTreeVisible] = createSignal(false)
@@ -143,6 +157,39 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
 
   // Keyboard shortcuts
   let shortcutManager: KeyboardShortcutManager | null = null
+
+  const saveDrawings = () => {
+    try {
+      if (!widget) return
+      // Use internal store to get all overlays (Property access)
+      const chartInstance = widget as any
+      const overlayStore = chartInstance._chartStore?.getOverlayStore?.()
+      if (overlayStore) {
+        const overlays = overlayStore.getInstances?.() || []
+        const drawings = overlays.map((o: any) => ({
+          name: o.name,
+          id: o.id,
+          groupId: o.groupId,
+          lock: o.lock,
+          visible: o.visible !== false,
+          points: o.points,
+          styles: o.styles,
+          extendData: o.extendData
+        }))
+        store.setDrawings(symbol().ticker, drawings)
+      }
+    } catch (e) {
+      console.warn('[ChartPro] Failed to save drawings:', e)
+    }
+  }
+
+  const loadDrawings = () => {
+    if (!widget) return
+    const drawings = store.getDrawings(symbol().ticker)
+    if (drawings) {
+      drawings.forEach((d: any) => widget?.createOverlay(d))
+    }
+  }
 
   props.ref({
     setTheme,
@@ -260,6 +307,9 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       }
     })
 
+    // Store chart instance globally for overlays (e.g. FRVP) to access data
+    ;(window as any)._klineChartInstance = widget
+
     if (widget) {
       const watermarkContainer = widget.getDom('candle_pane', DomPosition.Main)
       if (watermarkContainer) {
@@ -281,11 +331,13 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     }
 
     mainIndicators().forEach(indicator => {
-      createIndicator(widget, indicator, true, { id: 'candle_pane' })
+      createIndicator(widget, indicator, true, { id: 'candle_pane' }, symbol().pricePrecision)
     })
+    const storedSubIndicators = store.getSubIndicators()
+    const subIndicatorNames = storedSubIndicators ? Object.keys(storedSubIndicators) : (props.subIndicators ?? [])
     const subIndicatorMap: Record<string, string> = {}
-    props.subIndicators!.forEach(indicator => {
-      const paneId = createIndicator(widget, indicator, true)
+    subIndicatorNames.forEach(indicator => {
+      const paneId = createIndicator(widget, indicator, true, undefined, symbol().volumePrecision)
       if (paneId) {
         subIndicatorMap[indicator] = paneId
       }
@@ -293,12 +345,16 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     setSubIndicators(subIndicatorMap)
     widget?.loadMore(timestamp => {
       setLoading(true)
+      const gen = dataGeneration  // Capture current generation
       const get = async () => {
         const p = period()
         const [to] = adjustFromTo(p, timestamp!, 1)
         const [from] = adjustFromTo(p, to, 500)
-        const kLineDataList = await props.datafeed.getHistoryKLineData(symbol(), p, from, to)
-        widget?.applyMoreData(kLineDataList, kLineDataList.length > 0)
+        const kLineDataList = (await props.datafeed.getHistoryKLineData(symbol(), p, from, to)).filter(d => d.close > 0)
+        // Only apply if we're still on the same generation (symbol/period hasn't changed)
+        if (gen === dataGeneration) {
+          widget?.applyMoreData(kLineDataList, kLineDataList.length > 0)
+        }
         setLoading(false)
       }
       get()
@@ -350,13 +406,23 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     widget?.subscribeAction(ActionType.OnCandleBarClick, (data: any) => {
       // When candle is clicked, clear active overlay
       setStyleEditorOverlayId('')
+      saveDrawings()
     })
+
+    widget?.subscribeAction(ActionType.OnPaneDrag, () => {
+      saveDrawings()
+    })
+
+    loadDrawings()
   })
 
   onCleanup(() => {
+    saveDrawings()
     window.removeEventListener('resize', documentResize)
     shortcutManager?.destroy()
+    replaySelectCleanup?.()
     replayManager?.destroy()
+    ;(window as any)._klineChartInstance = null
     dispose(widgetRef!)
   })
 
@@ -371,30 +437,44 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     widget?.setPriceVolumePrecision(s?.pricePrecision ?? 2, s?.volumePrecision ?? 0)
   })
 
-  createEffect((prev?: PrevSymbolPeriod) => {
-    if (!loading()) {
-      if (prev) {
-        props.datafeed.unsubscribe(prev.symbol, prev.period)
-      }
-      const s = symbol()
-      const p = period()
-      setLoading(true)
-      setLoadingVisible(true)
-      const get = async () => {
-        const [from, to] = adjustFromTo(p, new Date().getTime(), 500)
-        const kLineDataList = await props.datafeed.getHistoryKLineData(s, p, from, to)
+  createEffect(on([symbol, period], (current, prev) => {
+    const [s, p] = current
+    const [prevS, prevP] = prev ?? []
+    
+    if (prevS && prevP) {
+      props.datafeed.unsubscribe(prevS, prevP)
+    }
+
+    dataGeneration++  // Invalidate any pending loadMore requests
+    setLoading(true)
+    setLoadingVisible(true)
+    
+    const get = async () => {
+      const [from, to] = adjustFromTo(p, new Date().getTime(), 500)
+      const kLineDataList = (await props.datafeed.getHistoryKLineData(s, p, from, to)).filter(d => d.close > 0)
+      
+      // Use untrack to check current symbol/period without adding them as dependencies of the async part
+      const currentS = untrack(symbol)
+      const currentP = untrack(period)
+      
+      if (
+        s.ticker === currentS.ticker &&
+        p.timespan === currentP.timespan &&
+        p.multiplier === currentP.multiplier
+      ) {
+        widget?.clearData()
         widget?.applyNewData(kLineDataList, kLineDataList.length > 0)
         props.datafeed.subscribe(s, p, data => {
-          widget?.updateData(data)
+          if (data.close > 0) {
+            widget?.updateData(data)
+          }
         })
-        setLoading(false)
-        setLoadingVisible(false)
       }
-      get()
-      return { symbol: s, period: p }
+      setLoading(false)
+      setLoadingVisible(false)
     }
-    return prev
-  })
+    get()
+  }, { defer: false }))
 
   createEffect(() => {
     const t = theme()
@@ -498,8 +578,64 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     if (styles()) {
       widget?.setStyles(styles())
       setWidgetDefaultStyles(lodashClone(widget!.getStyles()))
+      store.setStyles(styles())
     }
   })
+
+  // --- Persistence Effects ---
+  createEffect(() => {
+    store.setTheme(theme())
+  })
+
+  createEffect(() => {
+    store.setLocale(locale())
+  })
+
+  createEffect(() => {
+    store.setTimezone(timezone().key)
+  })
+
+  createEffect(() => {
+    store.setSymbol(symbol())
+  })
+
+  createEffect(() => {
+    store.setPeriod(period())
+  })
+
+  createEffect(() => {
+    store.setMainIndicators(mainIndicators())
+  })
+
+  createEffect(() => {
+    store.setSubIndicators(subIndicators())
+  })
+
+  // --- Drawing Persistence & Indicator Update: Handle Symbol Change ---
+  createEffect(on(symbol, (s) => {
+    if (!widget) return
+    
+    // Update precision for all active indicators to match the new symbol
+    mainIndicators().forEach(name => {
+      widget?.overrideIndicator({ name, precision: s.pricePrecision }, 'candle_pane')
+    })
+    
+    Object.entries(subIndicators()).forEach(([name, paneId]) => {
+      widget?.overrideIndicator({ name, precision: s.volumePrecision }, paneId)
+    })
+
+    // Clear existing overlays and load new ones for the selected symbol
+    widget.removeOverlay()
+    const drawings = store.getDrawings(s.ticker)
+    if (drawings) {
+      drawings.forEach((d: any) => widget?.createOverlay(d))
+    }
+
+    // Force a resize to recalculate Y-axis scales
+    setTimeout(() => {
+      widget?.resize()
+    }, 50)
+  }, { defer: true }))
 
   // --- Helper: collect overlay items for Object Tree ---
   const refreshOverlayItems = () => {
@@ -523,8 +659,70 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     setOverlayItems(items)
   }
 
-  // --- Helper: start replay ---
-  const startReplay = (dataSource: 'current' | 'custom') => {
+  // --- Helper: enter replay selection mode ---
+  let replayLastDataIndex = -1
+
+  const enterReplaySelection = () => {
+    if (!widget || replayActive()) return
+    setReplaySelecting(true)
+    setReplayCrosshairVisible(false)
+    replayLastDataIndex = -1
+
+    // Track crosshair position for vertical line preview
+    const crosshairHandler = (data: any) => {
+      if (data.x != null && data.x > 0) {
+        setReplayCrosshairX(data.x)
+        setReplayCrosshairVisible(true)
+        // Store the dataIndex from crosshair for use on click
+        if (data.dataIndex != null) {
+          replayLastDataIndex = data.dataIndex
+        }
+      } else {
+        setReplayCrosshairVisible(false)
+      }
+    }
+    widget.subscribeAction(ActionType.OnCrosshairChange, crosshairHandler)
+
+    // Handle click on candle to select start point
+    const clickHandler = (data: any) => {
+      if (!replaySelecting()) return
+      const dataList = widget!.getDataList()
+      if (!dataList || dataList.length === 0) return
+      
+      // Use dataIndex from the click event, or from the last crosshair position
+      let dataIndex = data.dataIndex ?? replayLastDataIndex
+      
+      if (dataIndex == null || dataIndex < 0) {
+        // Fallback: use the middle of the visible data
+        dataIndex = Math.floor(dataList.length / 2)
+      }
+
+      // Clamp to valid range
+      dataIndex = Math.max(0, Math.min(dataIndex, dataList.length - 1))
+
+      // Clean up selection mode
+      cancelReplaySelection()
+
+      // Start replay from the selected index
+      startReplayFromIndex(dataIndex)
+    }
+    widget.subscribeAction(ActionType.OnCandleBarClick, clickHandler)
+
+    // Store cleanup
+    replaySelectCleanup = () => {
+      widget?.unsubscribeAction(ActionType.OnCrosshairChange, crosshairHandler)
+      widget?.unsubscribeAction(ActionType.OnCandleBarClick, clickHandler)
+    }
+  }
+
+  const cancelReplaySelection = () => {
+    replaySelectCleanup?.()
+    replaySelectCleanup = null
+    setReplaySelecting(false)
+    setReplayCrosshairVisible(false)
+  }
+
+  const startReplayFromIndex = (startIndex: number) => {
     if (!widget) return
     replayManager = new BarReplayManager(widget, props.datafeed)
     replayManager.setHandlers({
@@ -532,11 +730,52 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       onStatusChange: (status) => setReplayStatus(status),
       onEnd: () => setReplayStatus('ended')
     })
-    replayManager.start({ dataSource, speed: replaySpeed() }).then(() => {
+    replayManager.start({ dataSource: 'current', speed: replaySpeed(), startFrom: startIndex }).then(() => {
       setReplayActive(true)
       setReplayTotal(replayManager!.getTotal())
       setReplayIndex(replayManager!.getIndex())
     })
+  }
+
+  // --- Helper: start replay (API — backward compatible) ---
+  const startReplay = (dataSource: 'current' | 'custom') => {
+    if (dataSource === 'current') {
+      enterReplaySelection()
+    }
+  }
+
+  // --- Helper: go to date ---
+  const gotoDate = (timestamp: number) => {
+    if (!widget) return
+    console.log(`[gotoDate] Target timestamp: ${timestamp} (${new Date(timestamp).toLocaleString()})`)
+    
+    // First try native scrollToTimestamp
+    widget.scrollToTimestamp(timestamp, 300)
+    
+    // Fallback/Verify: Find closest index and ensure it's visible
+    const dataList = widget.getDataList()
+    if (dataList && dataList.length > 0) {
+      // Find closest bar
+      let closestIdx = 0
+      let minDiff = Infinity
+      for (let i = 0; i < dataList.length; i++) {
+        const diff = Math.abs(dataList[i].timestamp - timestamp)
+        if (diff < minDiff) {
+          minDiff = diff
+          closestIdx = i
+        }
+      }
+      
+      console.log(`[gotoDate] Closest bar index: ${closestIdx}, time: ${new Date(dataList[closestIdx].timestamp).toLocaleString()}`)
+      
+      // If the target date is completely out of range (not loaded), log a warning
+      if (timestamp < dataList[0].timestamp) {
+        console.warn('[gotoDate] Target date is BEFORE the earliest loaded data. Please scroll back to load more history first.')
+      }
+      
+      // Scroll to that index explicitly (centers it or brings it into view)
+      widget.scrollToDataIndex(closestIdx, 300)
+    }
   }
 
   return (
@@ -558,7 +797,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           onMainIndicatorChange={data => {
             const newMainIndicators = [...mainIndicators()]
             if (data.added) {
-              createIndicator(widget, data.name, true, { id: 'candle_pane' })
+              createIndicator(widget, data.name, true, { id: 'candle_pane' }, symbol().pricePrecision)
               newMainIndicators.push(data.name)
             } else {
               widget?.removeIndicator('candle_pane', data.name)
@@ -569,7 +808,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           onSubIndicatorChange={data => {
             const newSubIndicators: Record<string, string> = { ...subIndicators() }
             if (data.added) {
-              const paneId = createIndicator(widget, data.name)
+              const paneId = createIndicator(widget, data.name, true, undefined, symbol().volumePrecision)
               if (paneId) {
                 newSubIndicators[data.name] = paneId
               }
@@ -688,11 +927,11 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         period={period()}
         periods={props.periods}
         chartType={chartType()}
-        onMenuClick={async () => {
-          try {
-            await startTransition(() => setDrawingBarVisible(!drawingBarVisible()))
+        onMenuClick={() => {
+          setDrawingBarVisible(!drawingBarVisible())
+          setTimeout(() => {
             widget?.resize()
-          } catch (e) { console.warn('DrawingBar transition error:', e) }
+          }, 50)
         }}
         onSymbolClick={() => { setSymbolSearchModalVisible(!symbolSearchModalVisible()) }}
         onPeriodChange={setPeriod}
@@ -709,6 +948,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
             setScreenshotUrl(url)
           }
         }}
+        onReplayClick={() => enterReplaySelection()}
       />
       <div
         class="klinecharts-pro-content">
@@ -718,15 +958,22 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         <Show when={drawingBarVisible()}>
           <DrawingBar
             locale={props.locale}
-            onDrawingItemClick={overlay => { widget?.createOverlay(overlay) }}
+            onDrawingItemClick={overlay => { 
+              widget?.createOverlay(overlay)
+              saveDrawings()
+            }}
             onModeChange={mode => { widget?.overrideOverlay({ mode: mode as OverlayMode }) }}
             onLockChange={lock => { widget?.overrideOverlay({ lock }) }}
             onVisibleChange={visible => { widget?.overrideOverlay({ visible }) }}
-            onRemoveClick={(groupId) => { widget?.removeOverlay({ groupId }) }}/>
+            onRemoveClick={(groupId) => { 
+              widget?.removeOverlay({ groupId })
+              saveDrawings()
+            }}/>
         </Show>
         <div
           ref={widgetRef}
           class='klinecharts-pro-widget'
+          style={replaySelecting() ? { cursor: 'crosshair' } : {}}
           data-drawing-bar-visible={drawingBarVisible()}
           onContextMenu={(e: MouseEvent) => {
             // Right-click on chart: if an overlay is nearby, show context menu
@@ -741,6 +988,15 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
             }
           }}
         />
+        {/* Replay Selection Overlay */}
+        <Show when={replaySelecting()}>
+          <ReplayOverlay
+            locale={props.locale}
+            crosshairX={replayCrosshairX()}
+            crosshairVisible={replayCrosshairVisible()}
+            onCancel={() => cancelReplaySelection()}
+          />
+        </Show>
       </div>
       {/* Replay Bar */}
       <Show when={replayActive()}>
@@ -759,6 +1015,13 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           onExit={() => { replayManager?.stop(); setReplayActive(false) }}
         />
       </Show>
+      {/* Bottom Status Bar */}
+      <BottomBar
+        locale={props.locale}
+        timezone={timezone().key}
+        onGotoDate={gotoDate}
+        onTimezoneClick={() => { setTimezoneModalVisible(v => !v) }}
+      />
     </>
   )
 }

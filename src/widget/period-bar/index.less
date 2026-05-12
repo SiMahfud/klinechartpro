@@ -8,6 +8,19 @@
   width: 100%;
   box-sizing: border-box;
   border-bottom: solid 1px var(--klinecharts-pro-border-color);
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+  &::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+  }
+
+  > * {
+    flex-shrink: 0;
+  }
+
   .menu-container {
     display: flex;
     height: 100%;
