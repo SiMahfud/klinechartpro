@@ -84,6 +84,8 @@ export interface ChartProOptions {
   datafeed: Datafeed
   persistence?: PersistenceOptions
   onError?: (error: Error) => void
+  onSettingsChange?: (settings: any) => void
+  onDrawingsChange?: (ticker: string, drawings: any[]) => void
 }
 
 export interface ChartPro {
@@ -114,4 +116,9 @@ export interface ChartPro {
   stopReplay?(): void
   showObjectTree?(): void
   showStyleEditor?(overlayId: string): void
+  // Database Sync API
+  getSettings?(): any
+  setSettings?(settings: any): void
+  getDrawings?(ticker: string): any[]
+  setDrawings?(ticker: string, drawings: any[]): void
 }

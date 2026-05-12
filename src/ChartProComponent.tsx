@@ -50,8 +50,10 @@ import { translateTimezone } from './widget/timezone-modal/data'
 
 import { SymbolInfo, Period, ChartProOptions, ChartPro } from './types'
 
-export interface ChartProComponentProps extends Required<Omit<ChartProOptions, 'container'>> {
+export interface ChartProComponentProps extends Required<Omit<ChartProOptions, 'container' | 'onSettingsChange' | 'onDrawingsChange'>> {
   ref: (chart: ChartPro) => void
+  onSettingsChange?: (settings: any) => void
+  onDrawingsChange?: (ticker: string, drawings: any[]) => void
 }
 
 interface PrevSymbolPeriod {
@@ -177,6 +179,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           extendData: o.extendData
         }))
         store.setDrawings(symbol().ticker, drawings)
+        props.onDrawingsChange?.(symbol().ticker, drawings)
       }
     } catch (e) {
       console.warn('[ChartPro] Failed to save drawings:', e)
@@ -209,7 +212,26 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     startReplay: (dataSource: 'current' | 'custom') => startReplay(dataSource),
     stopReplay: () => { replayManager?.stop(); setReplayActive(false) },
     showObjectTree: () => { refreshOverlayItems(); setObjectTreeVisible(true) },
-    showStyleEditor: (overlayId: string) => { setStyleEditorOverlayId(overlayId); setStyleEditorVisible(true) }
+    showStyleEditor: (overlayId: string) => { setStyleEditorOverlayId(overlayId); setStyleEditorVisible(true) },
+    getSettings: () => store.getAll(),
+    setSettings: (settings: any) => {
+      if (settings.theme) setTheme(settings.theme)
+      if (settings.locale) setLocale(settings.locale)
+      if (settings.timezone) setTimezone({ key: settings.timezone, text: translateTimezone(settings.timezone, settings.locale || locale()) })
+      if (settings.symbol) setSymbol(settings.symbol)
+      if (settings.period) setPeriod(settings.period)
+      if (settings.mainIndicators) setMainIndicators(settings.mainIndicators)
+      if (settings.subIndicators) setSubIndicators(settings.subIndicators)
+    },
+    getDrawings: (ticker: string) => store.getDrawings(ticker) ?? [],
+    setDrawings: (ticker: string, drawings: any[]) => {
+      store.setDrawings(ticker, drawings)
+      if (ticker === symbol().ticker) {
+        // clear existing overlays and recreate
+        widget?.removeOverlay()
+        drawings.forEach((d: any) => widget?.createOverlay(d))
+      }
+    }
   })
 
   const documentResize = () => {
@@ -609,6 +631,16 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
 
   createEffect(() => {
     store.setSubIndicators(subIndicators())
+  })
+
+  // --- Trigger onSettingsChange when any setting changes ---
+  createEffect(() => {
+    // track dependencies
+    theme(); timezone(); symbol(); period(); mainIndicators(); subIndicators();
+    // Use timeout to ensure store has updated from other effects
+    setTimeout(() => {
+      props.onSettingsChange?.(store.getAll())
+    }, 0)
   })
 
   // --- Drawing Persistence & Indicator Update: Handle Symbol Change ---

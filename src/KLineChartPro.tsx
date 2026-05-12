@@ -78,7 +78,9 @@ export default class KLineChartPro implements ChartPro {
           subIndicators={options.subIndicators ?? ['VOL']}
           datafeed={options.datafeed}
           persistence={options.persistence ?? { enabled: false }}
-          onError={options.onError ?? (() => {})}/>
+          onError={options.onError ?? (() => {})}
+          onSettingsChange={options.onSettingsChange}
+          onDrawingsChange={options.onDrawingsChange}/>
       ),
       this._container
     )
@@ -140,6 +142,22 @@ export default class KLineChartPro implements ChartPro {
 
   getPeriod (): Period {
     return this._chartApi?.getPeriod() ?? { multiplier: 1, timespan: 'day', text: 'D' }
+  }
+
+  getSettings (): any {
+    return this._chartApi?.getSettings?.()
+  }
+
+  setSettings (settings: any): void {
+    this._chartApi?.setSettings?.(settings)
+  }
+
+  getDrawings (ticker: string): any[] {
+    return this._chartApi?.getDrawings?.(ticker) ?? []
+  }
+
+  setDrawings (ticker: string, drawings: any[]): void {
+    this._chartApi?.setDrawings?.(ticker, drawings)
   }
 
   destroy (): void {

@@ -353,6 +353,52 @@ comparison.destroy()
 
 ---
 
+## 💾 Settings Save & Database Sync
+
+The library provides robust API callbacks to help you synchronize the user's chart configuration and drawings directly to your backend database (e.g., MySQL, MongoDB) in real-time.
+
+```typescript
+const chart = new KLineChartPro({
+  // ...other options
+  onSettingsChange: (settings) => {
+    // Fired when theme, timezone, period, or indicators change
+    console.log('Settings changed:', settings)
+    // Example: api.post('/save-settings', { settings })
+  },
+  onDrawingsChange: (ticker, drawings) => {
+    // Fired when a user adds, modifies, or deletes a drawing/overlay
+    console.log(`Drawings updated for ${ticker}:`, drawings)
+    // Example: api.post(`/save-drawings/${ticker}`, { drawings })
+  }
+})
+```
+
+### Applying Data from your Database
+When the user reloads the page or logs in from another device, you can fetch their saved data from your database and inject it into the chart:
+
+```typescript
+// 1. Fetch from your DB
+const savedSettings = await api.get('/user/chart-settings')
+const savedDrawings = await api.get(`/user/drawings/${ticker}`)
+
+// 2. Wait for chart to be ready
+await chart.ready()
+
+// 3. Inject into the chart
+if (savedSettings) {
+  chart.setSettings(savedSettings)
+}
+if (savedDrawings) {
+  chart.setDrawings(ticker, savedDrawings)
+}
+
+// You can also retrieve current state imperatively:
+const currentDrawings = chart.getDrawings(ticker)
+const currentSettings = chart.getSettings()
+```
+
+---
+
 ## 📊 DefaultDatafeed
 
 ```typescript
