@@ -1,0 +1,59 @@
+@import (reference) '../../base.less';
+
+.@{prefix-cls}-chart-type-settings-modal-content {
+  padding: 16px 0;
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+
+    .setting-label {
+      font-size: 14px;
+      color: var(--klinecharts-pro-text-color);
+      min-width: 100px;
+    }
+
+    .setting-input-group {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+
+      .auto-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        cursor: pointer;
+        user-select: none;
+
+        input {
+          cursor: pointer;
+        }
+      }
+
+      .size-input {
+        width: 100px;
+        border: 1px solid var(--klinecharts-pro-border-color);
+        background: var(--klinecharts-pro-background-color);
+        color: var(--klinecharts-pro-text-color);
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 13px;
+        outline: none;
+
+        &:focus {
+          border-color: var(--klinecharts-pro-primary-color);
+        }
+      }
+
+      .auto-value {
+        font-size: 12px;
+        color: var(--klinecharts-pro-text-second-color);
+        font-variant-numeric: tabular-nums;
+      }
+    }
+  }
+}

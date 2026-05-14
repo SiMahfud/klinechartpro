@@ -12,12 +12,13 @@ export interface ReplayOverlayProps {
   crosshairX: number
   /** Whether the crosshair is currently visible / over the chart */
   crosshairVisible: boolean
+  drawingBarVisible: boolean
   onCancel: () => void
 }
 
 const ReplayOverlay: Component<ReplayOverlayProps> = props => {
   return (
-    <div class="klinecharts-pro-replay-overlay">
+    <div class="klinecharts-pro-replay-overlay" style={{ left: props.drawingBarVisible ? '52px' : '0px' }}>
       {/* Banner */}
       <div class="replay-overlay-banner">
         <span class="replay-overlay-icon">📍</span>

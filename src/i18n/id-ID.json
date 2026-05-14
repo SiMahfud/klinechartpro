@@ -102,6 +102,13 @@
   "candle_down_stroke": "Turun Kosong",
   "ohlc": "OHLC Bar",
   "area": "Area",
+  "line": "Garis",
+  "renko": "Renko",
+  "range_bar": "Range Bar",
+  "brick_size": "Ukuran Bata",
+  "range_size": "Ukuran Range",
+  "auto": "Otomatis",
+  "chart_type_settings": "Pengaturan Jenis Grafik",
   "last_price_show": "Tampilkan Harga Terakhir",
   "high_price_show": "Tampilkan Harga Tertinggi",
   "low_price_show": "Tampilkan Harga Terendah",
@@ -166,5 +173,13 @@
   "load_custom_data": "Muat Data Khusus",
   "chart_type": "Jenis Grafik",
   "replay_select_hint": "Klik pada candle untuk menentukan titik mulai replay",
-  "goto_date": "Pergi ke Tanggal"
+  "goto_date": "Pergi ke Tanggal",
+  "add_indicator": "Tambah Indikator",
+  "chart_settings": "Pengaturan Grafik",
+  "show_grid": "Tampilkan Grid",
+  "hide_grid": "Sembunyikan Grid",
+  "lock_drawing": "Kunci",
+  "unlock_drawing": "Buka Kunci",
+  "remove_all_drawings": "Hapus Semua Gambar",
+  "go_to_latest": "Ke Candle Terakhir"
 }

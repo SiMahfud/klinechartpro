@@ -102,6 +102,13 @@
   "candle_down_stroke": "Down Hollow",
   "ohlc": "OHLC Bars",
   "area": "Area",
+  "line": "Line",
+  "renko": "Renko",
+  "range_bar": "Range Bar",
+  "brick_size": "Brick Size",
+  "range_size": "Range Size",
+  "auto": "Auto",
+  "chart_type_settings": "Chart Type Settings",
   "last_price_show": "Show Last Price",
   "high_price_show": "Show Highest Price",
   "low_price_show": "Show Lowest Price",
@@ -166,5 +173,13 @@
   "load_custom_data": "Load Custom Data",
   "chart_type": "Chart Type",
   "replay_select_hint": "Click on a candle to set replay start point",
-  "goto_date": "Go to Date"
+  "goto_date": "Go to Date",
+  "add_indicator": "Add Indicator",
+  "chart_settings": "Chart Settings",
+  "show_grid": "Show Grid",
+  "hide_grid": "Hide Grid",
+  "lock_drawing": "Lock",
+  "unlock_drawing": "Unlock",
+  "remove_all_drawings": "Remove All Drawings",
+  "go_to_latest": "Go to Latest"
 }

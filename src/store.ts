@@ -115,6 +115,18 @@ export class ChartStore {
     this._set('drawings', all)
   }
 
+  // --- Chart Type ---
+  getChartType (): string | null { return this._get<string>('chartType') }
+  setChartType (type: string): void { this._set('chartType', type) }
+
+  // --- Renko Brick Size (0 = auto) ---
+  getRenkoBrickSize (): number | null { return this._get<number>('renkoBrickSize') }
+  setRenkoBrickSize (size: number): void { this._set('renkoBrickSize', size) }
+
+  // --- Range Bar Size (0 = auto) ---
+  getRangeBarSize (): number | null { return this._get<number>('rangeBarSize') }
+  setRangeBarSize (size: number): void { this._set('rangeBarSize', size) }
+
   // --- Alerts ---
   getAlerts (): AlertConfig[] { return this._get<AlertConfig[]>('alerts') ?? [] }
   setAlerts (alerts: AlertConfig[]): void { this._set('alerts', alerts) }

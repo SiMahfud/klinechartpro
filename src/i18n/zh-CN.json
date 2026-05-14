@@ -108,6 +108,13 @@
   "candle_down_stroke": "阴线空心",
   "ohlc": "OHLC柱",
   "area": "面积图",
+  "line": "折线图",
+  "renko": "砖形图",
+  "range_bar": "等幅图",
+  "brick_size": "砖块大小",
+  "range_size": "幅度大小",
+  "auto": "自动",
+  "chart_type_settings": "图表类型设置",
   
   "last_price_show": "最新价显示",
   "high_price_show": "最高价显示",
@@ -171,5 +178,15 @@
   "keyboard_shortcuts": "快捷键",
   "use_current_data": "使用当前数据",
   "load_custom_data": "加载自定义数据",
-  "chart_type": "图表类型"
+  "chart_type": "图表类型",
+  "add_indicator": "添加指标",
+  "chart_settings": "图表设置",
+  "show_grid": "显示网格",
+  "hide_grid": "隐藏网格",
+  "lock_drawing": "锁定",
+  "unlock_drawing": "解锁",
+  "remove_all_drawings": "删除所有绘图",
+  "replay_select_hint": "点击蜡烛设置回放起点",
+  "goto_date": "跳转日期",
+  "go_to_latest": "跳转最新"
 }

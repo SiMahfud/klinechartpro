@@ -78,6 +78,9 @@ export default class KLineChartPro implements ChartPro {
           subIndicators={options.subIndicators ?? ['VOL']}
           datafeed={options.datafeed}
           persistence={options.persistence ?? { enabled: false }}
+          chartType={options.chartType}
+          renkoBrickSize={options.renkoBrickSize}
+          rangeBarSize={options.rangeBarSize}
           onError={options.onError ?? (() => {})}
           onSettingsChange={options.onSettingsChange}
           onDrawingsChange={options.onDrawingsChange}/>
@@ -142,6 +145,14 @@ export default class KLineChartPro implements ChartPro {
 
   getPeriod (): Period {
     return this._chartApi?.getPeriod() ?? { multiplier: 1, timespan: 'day', text: 'D' }
+  }
+
+  setChartType (type: string): void {
+    this._chartApi?.setChartType?.(type)
+  }
+
+  getChartType (): string {
+    return this._chartApi?.getChartType?.() ?? 'candle_solid'
   }
 
   getSettings (): any {

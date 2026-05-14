@@ -83,6 +83,9 @@ export interface ChartProOptions {
   subIndicators?: string[]
   datafeed: Datafeed
   persistence?: PersistenceOptions
+  chartType?: string
+  renkoBrickSize?: number
+  rangeBarSize?: number
   onError?: (error: Error) => void
   onSettingsChange?: (settings: any) => void
   onDrawingsChange?: (ticker: string, drawings: any[]) => void

@@ -27,10 +27,8 @@ import lodashClone from 'lodash/cloneDeep'
 import { SelectDataSourceItem, Loading } from './component'
 import { ChartStore } from './store'
 
-import {
-  PeriodBar, DrawingBar, IndicatorModal, TimezoneModal, SettingModal,
-  ScreenshotModal, IndicatorSettingModal, SymbolSearchModal
-} from './widget'
+import { PeriodBar, DrawingBar } from './widget'
+import ChartModals from './widget/chart-modals'
 
 import ReplayBar from './widget/replay-bar'
 import ReplayOverlay from './widget/replay-overlay'
@@ -41,19 +39,23 @@ import DrawingStyleEditor from './widget/drawing-style-editor'
 import type { DrawingStyleValues } from './widget/drawing-style-editor'
 import ContextMenu from './widget/context-menu'
 import type { ContextMenuItem } from './widget/context-menu'
+import { handleContextMenuAction } from './widget/context-menu/ContextMenuHandler'
 import { KeyboardShortcutManager } from './keyboard-shortcuts'
-import { BarReplayManager } from './bar-replay'
-import type { ReplayStatus } from './bar-replay'
+import { useReplayManager } from './widget/replay-bar/useReplayManager'
 import i18n from './i18n'
+import { useChartData } from './hooks/useChartData'
 
 import { translateTimezone } from './widget/timezone-modal/data'
 
 import { SymbolInfo, Period, ChartProOptions, ChartPro } from './types'
 
-export interface ChartProComponentProps extends Required<Omit<ChartProOptions, 'container' | 'onSettingsChange' | 'onDrawingsChange'>> {
+export interface ChartProComponentProps extends Required<Omit<ChartProOptions, 'container' | 'onSettingsChange' | 'onDrawingsChange' | 'chartType' | 'renkoBrickSize' | 'rangeBarSize'>> {
   ref: (chart: ChartPro) => void
   onSettingsChange?: (settings: any) => void
   onDrawingsChange?: (ticker: string, drawings: any[]) => void
+  chartType?: string
+  renkoBrickSize?: number
+  rangeBarSize?: number
 }
 
 interface PrevSymbolPeriod {
@@ -127,20 +129,47 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     visible: false, indicatorName: '', paneId: '', calcParams: [] as Array<any>
   })
 
-  // --- New feature state ---
-  const [chartType, setChartType] = createSignal('candle_solid')
+  const [chartTypeSettingsVisible, setChartTypeSettingsVisible] = createSignal(false)
+
+  // Datafeed and Chart Type Hook
+  const {
+    chartType,
+    setChartType,
+    renkoBrickSize,
+    rangeBarSize,
+    autoSizeValue,
+    handleChartTypeSizeChange,
+    setupLoadMore
+  } = useChartData({
+    getWidget: () => widget,
+    datafeed: props.datafeed,
+    symbol,
+    period,
+    setLoading,
+    setLoadingVisible,
+    store,
+    initialChartType: props.chartType,
+    initialRenkoBrickSize: props.renkoBrickSize,
+    initialRangeBarSize: props.rangeBarSize
+  })
 
   // Replay
-  const [replayActive, setReplayActive] = createSignal(false)
-  const [replaySelecting, setReplaySelecting] = createSignal(false)
-  const [replayCrosshairX, setReplayCrosshairX] = createSignal(0)
-  const [replayCrosshairVisible, setReplayCrosshairVisible] = createSignal(false)
-  const [replayStatus, setReplayStatus] = createSignal<string>('idle')
-  const [replayIndex, setReplayIndex] = createSignal(0)
-  const [replayTotal, setReplayTotal] = createSignal(0)
-  const [replaySpeed, setReplaySpeed] = createSignal(500)
-  let replayManager: BarReplayManager | null = null
-  let replaySelectCleanup: (() => void) | null = null
+  const {
+    replayActive,
+    replaySelecting,
+    replayCrosshairX,
+    replayCrosshairVisible,
+    replayStatus,
+    replayIndex,
+    replayTotal,
+    replaySpeed,
+    setReplaySpeed,
+    getReplayManager,
+    enterReplaySelection,
+    cancelReplaySelection,
+    startReplay,
+    stopReplay
+  } = useReplayManager(() => widget, props.datafeed)
 
   // Object Tree
   const [objectTreeVisible, setObjectTreeVisible] = createSignal(false)
@@ -156,6 +185,8 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
   const [contextMenuX, setContextMenuX] = createSignal(0)
   const [contextMenuY, setContextMenuY] = createSignal(0)
   const [contextMenuOverlayId, setContextMenuOverlayId] = createSignal('')
+  const [contextMenuMode, setContextMenuMode] = createSignal<'overlay' | 'chart'>('chart')
+  const [gridVisible, setGridVisible] = createSignal(true)
 
   // Keyboard shortcuts
   let shortcutManager: KeyboardShortcutManager | null = null
@@ -190,8 +221,27 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     if (!widget) return
     const drawings = store.getDrawings(symbol().ticker)
     if (drawings) {
-      drawings.forEach((d: any) => widget?.createOverlay(d))
+      drawings.forEach((d: any) => createOverlayWithMenu(d))
     }
+  }
+
+  // Helper: create overlay with right-click context menu (prevents default delete)
+  const createOverlayWithMenu = (overlayConfig: any) => {
+    return widget?.createOverlay({
+      ...overlayConfig,
+      onRightClick: (event: any) => {
+        // Set the overlay as active for context menu
+        setStyleEditorOverlayId(event.overlay.id)
+        setContextMenuOverlayId(event.overlay.id)
+        setContextMenuMode('overlay')
+        // Position will be set by the DOM contextmenu handler
+        return true // Returning true prevents klinecharts from deleting the overlay
+      },
+      onSelected: (event: any) => {
+        setStyleEditorOverlayId(event.overlay.id)
+        return false
+      }
+    })
   }
 
   props.ref({
@@ -207,10 +257,10 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     getSymbol: () => symbol(),
     setPeriod,
     getPeriod: () => period(),
-    setChartType: (type: string) => { setChartType(type); widget?.setStyles({ candle: { type: type as any } }) },
+    setChartType: (type: string) => { setChartType(type) },
     getChartType: () => chartType(),
     startReplay: (dataSource: 'current' | 'custom') => startReplay(dataSource),
-    stopReplay: () => { replayManager?.stop(); setReplayActive(false) },
+    stopReplay: () => { getReplayManager()?.stop(); },
     showObjectTree: () => { refreshOverlayItems(); setObjectTreeVisible(true) },
     showStyleEditor: (overlayId: string) => { setStyleEditorOverlayId(overlayId); setStyleEditorVisible(true) },
     getSettings: () => store.getAll(),
@@ -229,65 +279,13 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       if (ticker === symbol().ticker) {
         // clear existing overlays and recreate
         widget?.removeOverlay()
-        drawings.forEach((d: any) => widget?.createOverlay(d))
+        drawings.forEach((d: any) => createOverlayWithMenu(d))
       }
     }
   })
 
   const documentResize = () => {
     widget?.resize()
-  }
-
-  const adjustFromTo = (period: Period, toTimestamp: number, count: number) => {
-    let to = toTimestamp
-    let from = to
-    switch (period.timespan) {
-      case 'minute': {
-        to = to - (to % (60 * 1000))
-        from = to - count * period.multiplier * 60 * 1000
-        break
-      }
-      case 'hour': {
-        to = to - (to % (60 * 60 * 1000))
-        from = to - count * period.multiplier * 60 * 60 * 1000
-        break
-      }
-      case 'day': {
-        to = to - (to % (24 * 60 * 60 * 1000))
-        from = to - count * period.multiplier * 24 * 60 * 60 * 1000
-        break
-      }
-      case 'week': {
-        const date = new Date(to)
-        const week = date.getDay()
-        const dif = week === 0 ? 6 : week - 1
-        to = to - dif * 24 * 60 * 60 * 1000
-        const newDate = new Date(to)
-        to = new Date(`${newDate.getFullYear()}-${newDate.getMonth() + 1}-${newDate.getDate()}`).getTime()
-        from = to - count * period.multiplier * 7 * 24 * 60 * 60 * 1000
-        break
-      }
-      case 'month': {
-        const date = new Date(to)
-        const year = date.getFullYear()
-        const month = date.getMonth() + 1
-        to = new Date(`${year}-${month}-01`).getTime()
-        from = to - count * period.multiplier * 30 * 24 * 60 * 60 * 1000
-        const fromDate = new Date(from)
-        from = new Date(`${fromDate.getFullYear()}-${fromDate.getMonth() + 1}-01`).getTime()
-        break
-      }
-      case 'year': {
-        const date = new Date(to)
-        const year = date.getFullYear()
-        to = new Date(`${year}-01-01`).getTime()
-        from = to - count * period.multiplier * 365 * 24 * 60 * 60 * 1000
-        const fromDate = new Date(from)
-        from = new Date(`${fromDate.getFullYear()}-01-01`).getTime()
-        break
-      }
-    }
-    return [from, to]
   }
 
   onMount(() => {
@@ -365,22 +363,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       }
     })
     setSubIndicators(subIndicatorMap)
-    widget?.loadMore(timestamp => {
-      setLoading(true)
-      const gen = dataGeneration  // Capture current generation
-      const get = async () => {
-        const p = period()
-        const [to] = adjustFromTo(p, timestamp!, 1)
-        const [from] = adjustFromTo(p, to, 500)
-        const kLineDataList = (await props.datafeed.getHistoryKLineData(symbol(), p, from, to)).filter(d => d.close > 0)
-        // Only apply if we're still on the same generation (symbol/period hasn't changed)
-        if (gen === dataGeneration) {
-          widget?.applyMoreData(kLineDataList, kLineDataList.length > 0)
-        }
-        setLoading(false)
-      }
-      get()
-    })
+    setupLoadMore()
     widget?.subscribeAction(ActionType.OnTooltipIconClick, (data) => {
       if (data.indicatorName) {
         switch (data.iconId) {
@@ -422,6 +405,14 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     if (container) {
       shortcutManager = new KeyboardShortcutManager(container as HTMLElement)
       shortcutManager.register({ key: 'escape', description: 'Cancel overlay', callback: () => widget?.removeOverlay() })
+      shortcutManager.register({ key: 'delete', description: 'Delete selected overlay', callback: () => {
+        const overlayId = styleEditorOverlayId()
+        if (overlayId) {
+          widget?.removeOverlay({ id: overlayId })
+          setStyleEditorOverlayId('')
+          saveDrawings()
+        }
+      }})
     }
 
     // --- Track overlay clicks for style editor ---
@@ -442,8 +433,6 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     saveDrawings()
     window.removeEventListener('resize', documentResize)
     shortcutManager?.destroy()
-    replaySelectCleanup?.()
-    replayManager?.destroy()
     ;(window as any)._klineChartInstance = null
     dispose(widgetRef!)
   })
@@ -458,45 +447,6 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     }
     widget?.setPriceVolumePrecision(s?.pricePrecision ?? 2, s?.volumePrecision ?? 0)
   })
-
-  createEffect(on([symbol, period], (current, prev) => {
-    const [s, p] = current
-    const [prevS, prevP] = prev ?? []
-    
-    if (prevS && prevP) {
-      props.datafeed.unsubscribe(prevS, prevP)
-    }
-
-    dataGeneration++  // Invalidate any pending loadMore requests
-    setLoading(true)
-    setLoadingVisible(true)
-    
-    const get = async () => {
-      const [from, to] = adjustFromTo(p, new Date().getTime(), 500)
-      const kLineDataList = (await props.datafeed.getHistoryKLineData(s, p, from, to)).filter(d => d.close > 0)
-      
-      // Use untrack to check current symbol/period without adding them as dependencies of the async part
-      const currentS = untrack(symbol)
-      const currentP = untrack(period)
-      
-      if (
-        s.ticker === currentS.ticker &&
-        p.timespan === currentP.timespan &&
-        p.multiplier === currentP.multiplier
-      ) {
-        widget?.clearData()
-        widget?.applyNewData(kLineDataList, kLineDataList.length > 0)
-        props.datafeed.subscribe(s, p, data => {
-          if (data.close > 0) {
-            widget?.updateData(data)
-          }
-        })
-      }
-      setLoading(false)
-      setLoadingVisible(false)
-    }
-    get()
-  }, { defer: false }))
 
   createEffect(() => {
     const t = theme()
@@ -633,10 +583,23 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     store.setSubIndicators(subIndicators())
   })
 
+  // --- Chart Type Persistence ---
+  createEffect(() => {
+    store.setChartType(chartType())
+  })
+
+  createEffect(() => {
+    store.setRenkoBrickSize(renkoBrickSize())
+  })
+
+  createEffect(() => {
+    store.setRangeBarSize(rangeBarSize())
+  })
+
   // --- Trigger onSettingsChange when any setting changes ---
   createEffect(() => {
     // track dependencies
-    theme(); timezone(); symbol(); period(); mainIndicators(); subIndicators();
+    theme(); timezone(); symbol(); period(); mainIndicators(); subIndicators(); chartType();
     // Use timeout to ensure store has updated from other effects
     setTimeout(() => {
       props.onSettingsChange?.(store.getAll())
@@ -660,7 +623,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     widget.removeOverlay()
     const drawings = store.getDrawings(s.ticker)
     if (drawings) {
-      drawings.forEach((d: any) => widget?.createOverlay(d))
+      drawings.forEach((d: any) => createOverlayWithMenu(d))
     }
 
     // Force a resize to recalculate Y-axis scales
@@ -691,90 +654,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     setOverlayItems(items)
   }
 
-  // --- Helper: enter replay selection mode ---
-  let replayLastDataIndex = -1
 
-  const enterReplaySelection = () => {
-    if (!widget || replayActive()) return
-    setReplaySelecting(true)
-    setReplayCrosshairVisible(false)
-    replayLastDataIndex = -1
-
-    // Track crosshair position for vertical line preview
-    const crosshairHandler = (data: any) => {
-      if (data.x != null && data.x > 0) {
-        setReplayCrosshairX(data.x)
-        setReplayCrosshairVisible(true)
-        // Store the dataIndex from crosshair for use on click
-        if (data.dataIndex != null) {
-          replayLastDataIndex = data.dataIndex
-        }
-      } else {
-        setReplayCrosshairVisible(false)
-      }
-    }
-    widget.subscribeAction(ActionType.OnCrosshairChange, crosshairHandler)
-
-    // Handle click on candle to select start point
-    const clickHandler = (data: any) => {
-      if (!replaySelecting()) return
-      const dataList = widget!.getDataList()
-      if (!dataList || dataList.length === 0) return
-      
-      // Use dataIndex from the click event, or from the last crosshair position
-      let dataIndex = data.dataIndex ?? replayLastDataIndex
-      
-      if (dataIndex == null || dataIndex < 0) {
-        // Fallback: use the middle of the visible data
-        dataIndex = Math.floor(dataList.length / 2)
-      }
-
-      // Clamp to valid range
-      dataIndex = Math.max(0, Math.min(dataIndex, dataList.length - 1))
-
-      // Clean up selection mode
-      cancelReplaySelection()
-
-      // Start replay from the selected index
-      startReplayFromIndex(dataIndex)
-    }
-    widget.subscribeAction(ActionType.OnCandleBarClick, clickHandler)
-
-    // Store cleanup
-    replaySelectCleanup = () => {
-      widget?.unsubscribeAction(ActionType.OnCrosshairChange, crosshairHandler)
-      widget?.unsubscribeAction(ActionType.OnCandleBarClick, clickHandler)
-    }
-  }
-
-  const cancelReplaySelection = () => {
-    replaySelectCleanup?.()
-    replaySelectCleanup = null
-    setReplaySelecting(false)
-    setReplayCrosshairVisible(false)
-  }
-
-  const startReplayFromIndex = (startIndex: number) => {
-    if (!widget) return
-    replayManager = new BarReplayManager(widget, props.datafeed)
-    replayManager.setHandlers({
-      onStep: (index, total) => { setReplayIndex(index); setReplayTotal(total) },
-      onStatusChange: (status) => setReplayStatus(status),
-      onEnd: () => setReplayStatus('ended')
-    })
-    replayManager.start({ dataSource: 'current', speed: replaySpeed(), startFrom: startIndex }).then(() => {
-      setReplayActive(true)
-      setReplayTotal(replayManager!.getTotal())
-      setReplayIndex(replayManager!.getIndex())
-    })
-  }
-
-  // --- Helper: start replay (API — backward compatible) ---
-  const startReplay = (dataSource: 'current' | 'custom') => {
-    if (dataSource === 'current') {
-      enterReplaySelection()
-    }
-  }
 
   // --- Helper: go to date ---
   const gotoDate = (timestamp: number) => {
@@ -813,112 +693,134 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
   return (
     <>
       <i class="icon-close klinecharts-pro-load-icon"/>
-      <Show when={symbolSearchModalVisible()}>
-        <SymbolSearchModal
-          locale={props.locale}
-          datafeed={props.datafeed}
-          onSymbolSelected={symbol => { setSymbol(symbol) }}
-          onClose={() => { setSymbolSearchModalVisible(false) }}/>
-      </Show>
-      <Show when={indicatorModalVisible()}>
-        <IndicatorModal
-          locale={props.locale}
-          mainIndicators={mainIndicators()}
-          subIndicators={subIndicators()}
-          onClose={() => { setIndicatorModalVisible(false) }}
-          onMainIndicatorChange={data => {
-            const newMainIndicators = [...mainIndicators()]
-            if (data.added) {
-              createIndicator(widget, data.name, true, { id: 'candle_pane' }, symbol().pricePrecision)
-              newMainIndicators.push(data.name)
-            } else {
-              widget?.removeIndicator('candle_pane', data.name)
-              newMainIndicators.splice(newMainIndicators.indexOf(data.name), 1)
+      <ChartModals
+        locale={props.locale}
+        chartTypeSettingsVisible={chartTypeSettingsVisible()}
+        chartType={chartType()}
+        renkoBrickSize={renkoBrickSize()}
+        rangeBarSize={rangeBarSize()}
+        autoSizeValue={autoSizeValue()}
+        onChartTypeSettingsClose={() => setChartTypeSettingsVisible(false)}
+        onChartTypeSizeConfirm={(size) => handleChartTypeSizeChange(size)}
+        symbolSearchModalVisible={symbolSearchModalVisible()}
+        datafeed={props.datafeed}
+        onSymbolSearchClose={() => setSymbolSearchModalVisible(false)}
+        onSymbolSelected={(sym) => setSymbol(sym)}
+        indicatorModalVisible={indicatorModalVisible()}
+        mainIndicators={mainIndicators()}
+        subIndicators={subIndicators()}
+        onIndicatorModalClose={() => setIndicatorModalVisible(false)}
+        onMainIndicatorChange={data => {
+          const newMainIndicators = [...mainIndicators()]
+          if (data.added) {
+            createIndicator(widget, data.name, true, { id: 'candle_pane' }, symbol().pricePrecision)
+            newMainIndicators.push(data.name)
+          } else {
+            widget?.removeIndicator('candle_pane', data.name)
+            newMainIndicators.splice(newMainIndicators.indexOf(data.name), 1)
+          }
+          setMainIndicators(newMainIndicators)
+        }}
+        onSubIndicatorChange={data => {
+          const newSubIndicators: Record<string, string> = { ...subIndicators() }
+          if (data.added) {
+            const paneId = createIndicator(widget, data.name, true, undefined, symbol().volumePrecision)
+            if (paneId) {
+              newSubIndicators[data.name] = paneId
             }
-            setMainIndicators(newMainIndicators)
-          }}
-          onSubIndicatorChange={data => {
-            const newSubIndicators: Record<string, string> = { ...subIndicators() }
-            if (data.added) {
-              const paneId = createIndicator(widget, data.name, true, undefined, symbol().volumePrecision)
-              if (paneId) {
-                newSubIndicators[data.name] = paneId
-              }
-            } else {
-              if (data.paneId) {
-                widget?.removeIndicator(data.paneId, data.name)
-                delete newSubIndicators[data.name]
-              }
+          } else {
+            if (data.paneId) {
+              widget?.removeIndicator(data.paneId, data.name)
+              delete newSubIndicators[data.name]
             }
-            setSubIndicators(newSubIndicators)
-          }}/>
-      </Show>
-      <Show when={timezoneModalVisible()}>
-        <TimezoneModal
-          locale={props.locale}
-          timezone={timezone()}
-          onClose={() => { setTimezoneModalVisible(false) }}
-          onConfirm={setTimezone}
-        />
-      </Show>
-      <Show when={settingModalVisible()}>
-        <SettingModal
-          locale={props.locale}
-          currentStyles={utils.clone(widget!.getStyles())}
-          onClose={() => { setSettingModalVisible(false) }}
-          onChange={style => {
-            widget?.setStyles(style)
-          }}
-          onRestoreDefault={(options: SelectDataSourceItem[]) => {
-            const style = {}
-            options.forEach(option => {
-              const key = option.key
-              lodashSet(style, key, utils.formatValue(widgetDefaultStyles(), key))
-            })
-            widget?.setStyles(style)
-          }}
-        />
-      </Show>
-      <Show when={screenshotUrl().length > 0}>
-        <ScreenshotModal
-          locale={props.locale}
-          url={screenshotUrl()}
-          onClose={() => { setScreenshotUrl('') }}
-        />
-      </Show>
-      <Show when={indicatorSettingModalParams().visible}>
-        <IndicatorSettingModal
-          locale={props.locale}
-          params={indicatorSettingModalParams()}
-          onClose={() => { setIndicatorSettingModalParams({ visible: false, indicatorName: '', paneId: '', calcParams: [] }) }}
-          onConfirm={(params)=> {
-            const modalParams = indicatorSettingModalParams()
-            widget?.overrideIndicator({ name: modalParams.indicatorName, calcParams: params }, modalParams.paneId)
-          }}
-        />
-      </Show>
+          }
+          setSubIndicators(newSubIndicators)
+        }}
+        timezoneModalVisible={timezoneModalVisible()}
+        timezone={timezone()}
+        onTimezoneModalClose={() => setTimezoneModalVisible(false)}
+        onTimezoneConfirm={setTimezone}
+        settingModalVisible={settingModalVisible()}
+        currentStyles={utils.clone(widget!.getStyles())}
+        onSettingModalClose={() => setSettingModalVisible(false)}
+        onSettingChange={style => widget?.setStyles(style)}
+        onSettingRestoreDefault={(options) => {
+          const style = {}
+          options.forEach(option => {
+            const key = option.key
+            lodashSet(style, key, utils.formatValue(widgetDefaultStyles(), key))
+          })
+          widget?.setStyles(style)
+        }}
+        screenshotUrl={screenshotUrl()}
+        onScreenshotClose={() => setScreenshotUrl('')}
+        indicatorSettingModalParams={indicatorSettingModalParams()}
+        onIndicatorSettingModalClose={() => setIndicatorSettingModalParams({ visible: false, indicatorName: '', paneId: '', calcParams: [] })}
+        onIndicatorSettingConfirm={(params) => {
+          const modalParams = indicatorSettingModalParams()
+          widget?.overrideIndicator({ name: modalParams.indicatorName, calcParams: params }, modalParams.paneId)
+        }}
+      />
       {/* Context Menu */}
       <Show when={contextMenuVisible()}>
         <ContextMenu
           x={contextMenuX()}
           y={contextMenuY()}
-          items={[
-            { key: 'edit_style', label: i18n('edit_style', props.locale), icon: '🎨' },
-            { key: 'hide', label: i18n('hide', props.locale), icon: '👁' },
-            { key: 'delete', label: i18n('delete', props.locale), icon: '🗑', danger: true }
-          ]}
+          items={contextMenuMode() === 'overlay'
+            ? [
+                { key: 'edit_style', label: i18n('edit_style', props.locale), icon: '🎨' },
+                { key: 'lock', label: i18n((() => {
+                    try {
+                      const overlayStore = (widget as any)?._chartStore?.()?.getOverlayStore?.()
+                      const overlays = overlayStore?.getInstances?.() ?? []
+                      const o = overlays.find((ov: any) => ov.id === contextMenuOverlayId())
+                      return o?.lock ? 'unlock_drawing' : 'lock_drawing'
+                    } catch { return 'lock_drawing' }
+                  })(), props.locale), icon: (() => {
+                    try {
+                      const overlayStore = (widget as any)?._chartStore?.()?.getOverlayStore?.()
+                      const overlays = overlayStore?.getInstances?.() ?? []
+                      const o = overlays.find((ov: any) => ov.id === contextMenuOverlayId())
+                      return o?.lock ? '🔓' : '🔒'
+                    } catch { return '🔒' }
+                  })() },
+                { key: 'hide', label: i18n('hide', props.locale), icon: '👁' },
+                { key: 'sep1', label: '', separator: true },
+                { key: 'delete', label: i18n('delete', props.locale), icon: '🗑', danger: true }
+              ]
+            : [
+                { key: 'add_indicator', label: i18n('add_indicator', props.locale), icon: '📊' },
+                { key: 'chart_settings', label: i18n('chart_settings', props.locale), icon: '⚙️' },
+                { key: 'screenshot', label: i18n('screenshot', props.locale), icon: '📸' },
+                { key: 'sep1', label: '', separator: true },
+                { key: 'toggle_grid', label: i18n(gridVisible() ? 'hide_grid' : 'show_grid', props.locale), icon: gridVisible() ? '▦' : '▢' },
+                { key: 'goto_date', label: i18n('goto_date', props.locale), icon: '📅' },
+                { key: 'go_to_latest', label: i18n('go_to_latest', props.locale), icon: '🏠' },
+                { key: 'sep2', label: '', separator: true },
+                { key: 'fullscreen', label: i18n('full_screen', props.locale), icon: '⛶' },
+                { key: 'sep3', label: '', separator: true },
+                { key: 'remove_all_drawings', label: i18n('remove_all_drawings', props.locale), icon: '🧹', danger: true }
+              ]
+          }
           onSelect={(key) => {
             const id = contextMenuOverlayId()
-            if (key === 'edit_style') {
-              setStyleEditorOverlayId(id)
-              setStyleEditorCurrentStyles({})
-              setStyleEditorVisible(true)
-            } else if (key === 'hide') {
-              widget?.overrideOverlay({ id, visible: false })
-            } else if (key === 'delete') {
-              widget?.removeOverlay({ id })
-            }
-            setContextMenuVisible(false)
+            handleContextMenuAction({
+              key,
+              overlayId: id,
+              widget,
+              widgetRef,
+              theme: props.theme,
+              gridVisible: gridVisible(),
+              setGridVisible,
+              setStyleEditorOverlayId,
+              setStyleEditorCurrentStyles,
+              setStyleEditorVisible,
+              setIndicatorModalVisible,
+              setSettingModalVisible,
+              setScreenshotUrl,
+              setContextMenuVisible,
+              saveDrawings
+            })
           }}
           onClose={() => setContextMenuVisible(false)}
         />
@@ -945,9 +847,14 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
               id,
               styles: {
                 line: { color: styles.lineColor, size: styles.lineWidth, style: styles.lineStyle },
-                polygon: { color: styles.lineColor, borderColor: styles.lineColor, borderSize: styles.lineWidth, borderStyle: styles.lineStyle }
+                polygon: { style: 'stroke_fill', color: styles.fillColor, borderColor: styles.lineColor, borderSize: styles.lineWidth, borderStyle: styles.lineStyle },
+                rect: { style: 'stroke_fill', color: styles.fillColor, borderColor: styles.lineColor, borderSize: styles.lineWidth, borderStyle: styles.lineStyle },
+                circle: { style: 'stroke_fill', color: styles.fillColor, borderColor: styles.lineColor, borderSize: styles.lineWidth, borderStyle: styles.lineStyle },
+                arc: { color: styles.lineColor, size: styles.lineWidth, style: styles.lineStyle },
+                text: { color: styles.lineColor }
               } as any
             })
+            saveDrawings()
           }}
           onClose={() => setStyleEditorVisible(false)}
         />
@@ -967,10 +874,8 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         }}
         onSymbolClick={() => { setSymbolSearchModalVisible(!symbolSearchModalVisible()) }}
         onPeriodChange={setPeriod}
-        onChartTypeChange={(type) => {
-          setChartType(type)
-          widget?.setStyles({ candle: { type: type as any } })
-        }}
+        onChartTypeChange={setChartType}
+        onChartTypeSettingsClick={() => setChartTypeSettingsVisible(true)}
         onIndicatorClick={() => { setIndicatorModalVisible((visible => !visible)) }}
         onTimezoneClick={() => { setTimezoneModalVisible((visible => !visible)) }}
         onSettingClick={() => { setSettingModalVisible((visible => !visible)) }}
@@ -991,7 +896,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           <DrawingBar
             locale={props.locale}
             onDrawingItemClick={overlay => { 
-              widget?.createOverlay(overlay)
+              createOverlayWithMenu(overlay)
               saveDrawings()
             }}
             onModeChange={mode => { widget?.overrideOverlay({ mode: mode as OverlayMode }) }}
@@ -1008,7 +913,6 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           style={replaySelecting() ? { cursor: 'crosshair' } : {}}
           data-drawing-bar-visible={drawingBarVisible()}
           onContextMenu={(e: MouseEvent) => {
-            // Right-click on chart: if an overlay is nearby, show context menu
             e.preventDefault()
             setContextMenuX(e.clientX)
             setContextMenuY(e.clientY)
@@ -1016,8 +920,12 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
             const overlayId = styleEditorOverlayId()
             if (overlayId) {
               setContextMenuOverlayId(overlayId)
-              setContextMenuVisible(true)
+              setContextMenuMode('overlay')
+            } else {
+              setContextMenuOverlayId('')
+              setContextMenuMode('chart')
             }
+            setContextMenuVisible(true)
           }}
         />
         {/* Replay Selection Overlay */}
@@ -1026,6 +934,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
             locale={props.locale}
             crosshairX={replayCrosshairX()}
             crosshairVisible={replayCrosshairVisible()}
+            drawingBarVisible={drawingBarVisible()}
             onCancel={() => cancelReplaySelection()}
           />
         </Show>
@@ -1038,13 +947,13 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           index={replayIndex()}
           total={replayTotal()}
           speed={replaySpeed()}
-          onPlay={() => replayManager?.play()}
-          onPause={() => replayManager?.pause()}
-          onStepForward={() => replayManager?.stepForward()}
-          onStepBackward={() => replayManager?.stepBackward()}
-          onSpeedChange={(speed) => { setReplaySpeed(speed); replayManager?.setSpeed(speed) }}
-          onSeek={(index) => replayManager?.seekTo(index)}
-          onExit={() => { replayManager?.stop(); setReplayActive(false) }}
+          onPlay={() => getReplayManager()?.play()}
+          onPause={() => getReplayManager()?.pause()}
+          onStepForward={() => getReplayManager()?.stepForward()}
+          onStepBackward={() => getReplayManager()?.stepBackward()}
+          onSpeedChange={(speed) => { setReplaySpeed(speed); getReplayManager()?.setSpeed(speed) }}
+          onSeek={(index) => getReplayManager()?.seekTo(index)}
+          onExit={stopReplay}
         />
       </Show>
       {/* Bottom Status Bar */}

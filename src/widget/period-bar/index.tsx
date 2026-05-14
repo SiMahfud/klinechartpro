@@ -29,6 +29,7 @@ export interface PeriodBarProps {
   onSymbolClick: () => void
   onPeriodChange: (period: Period) => void
   onChartTypeChange?: (type: string) => void
+  onChartTypeSettingsClick?: () => void
   onIndicatorClick: () => void
   onTimezoneClick: () => void
   onSettingClick: () => void
@@ -37,7 +38,7 @@ export interface PeriodBarProps {
 }
 
 const PeriodBar: Component<PeriodBarProps> = props => {
-  let ref: Node
+  let ref: HTMLDivElement
 
   const [fullScreen, setFullScreen] = createSignal(false)
 
@@ -62,7 +63,10 @@ const PeriodBar: Component<PeriodBarProps> = props => {
   return (
     <div
       ref={el => { ref = el }}
-      class="klinecharts-pro-period-bar">
+      class="klinecharts-pro-period-bar"
+      onWheel={(e) => {
+        ref.scrollLeft += e.deltaY
+      }}>
       <div class='menu-container'>
         <svg
           class={props.spread ? '' : 'rotate'}
@@ -98,11 +102,20 @@ const PeriodBar: Component<PeriodBarProps> = props => {
           onChange={(e) => props.onChartTypeChange?.((e.target as HTMLSelectElement).value)}>
           <option value="candle_solid">{i18n('candle_solid', props.locale)}</option>
           <option value="candle_stroke">{i18n('candle_stroke', props.locale)}</option>
-          <option value="candle_up_stroke">{i18n('candle_up_stroke', props.locale)}</option>
-          <option value="candle_down_stroke">{i18n('candle_down_stroke', props.locale)}</option>
           <option value="ohlc">{i18n('ohlc', props.locale)}</option>
           <option value="area">{i18n('area', props.locale)}</option>
+          <option value="line">{i18n('line', props.locale)}</option>
+          <option value="renko">{i18n('renko', props.locale)}</option>
+          <option value="range_bar">{i18n('range_bar', props.locale)}</option>
         </select>
+        <Show when={props.chartType === 'renko' || props.chartType === 'range_bar'}>
+          <span
+            class="chart-type-settings-btn"
+            title={i18n('chart_type_settings', props.locale)}
+            onClick={() => props.onChartTypeSettingsClick?.()}>
+            ⚙
+          </span>
+        </Show>
       </div>
       <div
         class='item tools'
