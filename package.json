@@ -1,6 +1,6 @@
 {
   "name": "@simahfud/klinecharts-pro",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Professional TradingView-inspired charting component built on KLineChart. Features bar replay, keyboard shortcuts, 25 drawing tools, 6 chart types, and custom tool API.",
   "type": "module",
   "main": "./dist/klinecharts-pro.umd.js",

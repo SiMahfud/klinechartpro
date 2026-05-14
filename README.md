@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![KLineChart](https://img.shields.io/badge/based%20on-KLineChart-orange)](https://github.com/liihuu/KLineChart)
 
-A professional-grade, TradingView-inspired charting component built on [KLineChart](https://github.com/liihuu/KLineChart), powered by **SolidJS**. Features 25 built-in drawing tools, bar replay, keyboard shortcuts, multi-chart type support, and a complete custom tool API.
+A professional-grade, TradingView-inspired charting component built on [KLineChart](https://github.com/liihuu/KLineChart), powered by **SolidJS**. Features 25 built-in drawing tools, bar replay, keyboard shortcuts, multi-chart type support, multi-symbol comparison overlays, price alerts, chart templates, and a complete custom tool API.
 
 > 🔗 **Repository**: [github.com/SiMahfud/klinechartpro](https://github.com/SiMahfud/klinechartpro)  
 > 📦 Forked from [klinecharts/pro](https://github.com/klinecharts/pro)
@@ -63,8 +63,9 @@ A professional-grade, TradingView-inspired charting component built on [KLineCha
 | **🏷️ Price Labels** | Custom price markers on Y-axis |
 | **🔗 Crosshair Sync** | Synchronize crosshair across multiple chart instances |
 | **🎨 Style Editor** | Edit drawing properties (color, width, style) via right-click |
-| **📋 Context Menu** | Right-click overlay menu with Edit/Hide/Delete actions |
+| **📋 Context Menu** | Right-click overlay menu with Edit/Hide/Delete/Alert/Performance actions |
 | **📊 Chart Type Selector** | Switch between 6 chart types from the toolbar |
+| **🖥️ Multi-Chart Layout** | `onLayoutClick` callback for parent-managed split views |
 
 ---
 
@@ -154,6 +155,28 @@ const chart = new KLineChartPro({
 // Wait for chart to be ready before calling methods
 await chart.ready()
 console.log('Chart initialized:', chart.getSymbol())
+```
+
+### Constructor Options
+
+```typescript
+const chart = new KLineChartPro({
+  container: 'chart-container',       // Required: DOM element or selector
+  symbol: { ticker: 'AAPL' },         // Required: Initial symbol
+  period: { multiplier: 1, timespan: 'day', text: 'D' },  // Required
+  datafeed: myDatafeed,               // Required: Datafeed implementation
+  theme: 'dark',                      // 'dark' | 'light'
+  locale: 'en-US',                    // 'en-US' | 'zh-CN' | 'id-ID' | 'ja-JP' | 'ko-KR'
+  drawingBarVisible: true,            // Show drawing toolbar
+  mainIndicators: ['MA', 'EMA'],      // Initial main indicators
+  subIndicators: ['VOL', 'MACD'],     // Initial sub indicators
+  chartType: 'candle_solid',          // Initial chart type
+  renkoBrickSize: 10,                 // Renko brick size
+  rangeBarSize: 10,                   // Range bar size
+  onSettingsChange: (settings) => {}, // Called on settings change
+  onDrawingsChange: (ticker, d) => {},// Called on drawings change
+  onLayoutClick: () => {},            // Called when Layout button is clicked
+})
 ```
 
 ---
@@ -349,6 +372,41 @@ comparison.getSymbols()
 comparison.toggleVisibility('MSFT')
 comparison.removeSymbol('MSFT')
 comparison.destroy()
+```
+
+> **UI Integration**: Click the **+ Compare** button in the toolbar to add a comparison symbol via the search modal. Each comparison symbol is drawn as a colored line chart on the main candle pane, normalized to percentage change from the first visible bar. A floating legend in the top-left corner shows active comparisons with a remove button.
+
+### Multi-Chart Layout
+
+```typescript
+const chart = new KLineChartPro({
+  // ... other options
+  onLayoutClick: () => {
+    // Handle layout button click — create your own split view
+    // For example, create a second chart instance side by side
+  }
+})
+
+// Access the underlying klinecharts widget for advanced integrations
+const widget = chart.getWidget()
+```
+
+**Example: Dual Chart with Crosshair Sync**
+
+```typescript
+import { KLineChartPro, CrosshairSyncManager } from '@simahfud/klinecharts-pro'
+
+// Create two chart instances
+const chart1 = new KLineChartPro({ container: 'chart-left', ... })
+const chart2 = new KLineChartPro({ container: 'chart-right', ... })
+
+// Sync crosshairs
+const sync = new CrosshairSyncManager()
+sync.addChart(chart1.getWidget())
+sync.addChart(chart2.getWidget())
+
+// Cleanup
+sync.destroy()
 ```
 
 ---
