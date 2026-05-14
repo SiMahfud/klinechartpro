@@ -16,7 +16,8 @@ import { createSignal, createEffect, onMount, Show, onCleanup, startTransition, 
 
 import {
   init, dispose, utils, Nullable, Chart, OverlayMode, Styles,
-  TooltipIconPosition, ActionType, PaneOptions, Indicator, DomPosition, FormatDateType
+  TooltipIconPosition, ActionType, PaneOptions, Indicator, DomPosition, FormatDateType,
+  registerIndicator
 } from 'klinecharts'
 
 // @ts-ignore
@@ -51,6 +52,7 @@ import i18n from './i18n'
 import { useChartData, adjustFromTo } from './hooks/useChartData'
 
 import { translateTimezone } from './widget/timezone-modal/data'
+import { createPinePlugin } from '@simahfud/pine-to-kline'
 
 import { SymbolInfo, Period, ChartProOptions, ChartPro } from './types'
 
@@ -152,6 +154,51 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
   const chartTemplateManager = new ChartTemplateManager(store)
   const [templateModalVisible, setTemplateModalVisible] = createSignal(false)
   const [templates, setTemplates] = createSignal<any[]>(chartTemplateManager.getTemplates())
+
+  // Pine Script Integration
+  const [pineEditorVisible, setPineEditorVisible] = createSignal(false)
+  const pineAPI = createPinePlugin()
+
+  const handlePineEditorApply = (code: string) => {
+    try {
+      const result = pineAPI.compile(code)
+      if (!result.success) {
+        throw result.errors[0]
+      }
+      
+      // Register into klinecharts core
+      registerIndicator(result.indicatorConfig as any)
+      
+      // Add to chart
+      if (result.indicatorConfig.series === 'price') {
+        const newMainIndicators = [...mainIndicators()]
+        if (!newMainIndicators.includes(result.name)) {
+          newMainIndicators.push(result.name)
+          setMainIndicators(newMainIndicators)
+        } else {
+          // Remove old instance to refresh it
+          widget?.removeIndicator('candle_pane', result.name)
+        }
+        createIndicator(widget, result.name, true, { id: 'candle_pane' }, symbol().pricePrecision)
+      } else {
+        const newSubIndicators = { ...subIndicators() }
+        if (!newSubIndicators[result.name]) {
+          const paneId = createIndicator(widget, result.name, true, undefined, symbol().volumePrecision)
+          if (paneId) {
+            newSubIndicators[result.name] = paneId
+            setSubIndicators(newSubIndicators)
+          }
+        } else {
+          // Remove old instance and refresh it in the same pane
+          const paneId = newSubIndicators[result.name]
+          widget?.removeIndicator(paneId, result.name)
+          createIndicator(widget, result.name, true, { id: paneId }, symbol().volumePrecision)
+        }
+      }
+    } catch (e: any) {
+      alert(`Pine Script Error:\n\n${e.message}`)
+    }
+  }
 
   // Datafeed and Chart Type Hook
   const {
@@ -418,7 +465,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           case 'setting': {
             const indicator = widget?.getIndicatorByPaneId(data.paneId, data.indicatorName) as Indicator
             setIndicatorSettingModalParams({
-              visible: true, indicatorName: data.indicatorName, paneId: data.paneId, calcParams: indicator.calcParams
+              visible: true, indicatorName: data.indicatorName, paneId: data.paneId, calcParams: indicator.calcParams, extendData: (indicator as any).extendData
             })
             break
           }
@@ -799,23 +846,29 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         settingModalVisible={settingModalVisible()}
         currentStyles={utils.clone(widget!.getStyles())}
         onSettingModalClose={() => setSettingModalVisible(false)}
-        onSettingChange={style => widget?.setStyles(style)}
-        onSettingRestoreDefault={(options) => {
-          const style = {}
+        onSettingChange={styles => {
+          setStyles(styles)
+        }}
+        onSettingRestoreDefault={options => {
+          const styles: any = {}
           options.forEach(option => {
             const key = option.key
-            lodashSet(style, key, utils.formatValue(widgetDefaultStyles(), key))
+            lodashSet(styles, key, utils.formatValue(widgetDefaultStyles(), key))
           })
-          widget?.setStyles(style)
+          setStyles(styles)
         }}
         screenshotUrl={screenshotUrl()}
         onScreenshotClose={() => setScreenshotUrl('')}
         indicatorSettingModalParams={indicatorSettingModalParams()}
-        onIndicatorSettingModalClose={() => setIndicatorSettingModalParams({ visible: false, indicatorName: '', paneId: '', calcParams: [] })}
-        onIndicatorSettingConfirm={(params) => {
-          const modalParams = indicatorSettingModalParams()
-          widget?.overrideIndicator({ name: modalParams.indicatorName, calcParams: params }, modalParams.paneId)
+        onIndicatorSettingModalClose={() => {
+          setIndicatorSettingModalParams({ visible: false, indicatorName: '', paneId: '', calcParams: [], extendData: undefined })
         }}
+        onIndicatorSettingConfirm={(params) => {
+          widget?.overrideIndicator({ name: indicatorSettingModalParams().indicatorName, calcParams: params }, indicatorSettingModalParams().paneId)
+        }}
+        pineEditorVisible={pineEditorVisible()}
+        onPineEditorClose={() => setPineEditorVisible(false)}
+        onPineEditorApply={handlePineEditorApply}
       />
       {/* Context Menu */}
       <Show when={contextMenuVisible()}>
@@ -1076,6 +1129,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         locale={props.locale}
         timezone={timezone().key}
         onGotoDate={gotoDate}
+        onPineEditorClick={() => setPineEditorVisible(true)}
         onTimezoneClick={() => { setTimezoneModalVisible(v => !v) }}
       />
       

@@ -6,6 +6,7 @@ import TimezoneModal from '../timezone-modal'
 import SettingModal from '../setting-modal'
 import ScreenshotModal from '../screenshot-modal'
 import IndicatorSettingModal from '../indicator-setting-modal'
+import PineEditorModal from '../pine-editor-modal'
 import { SymbolInfo, Datafeed } from '../../types'
 import { SelectDataSourceItem } from '../../component'
 
@@ -52,9 +53,14 @@ export interface ChartModalsProps {
   onScreenshotClose: () => void
 
   // Indicator Setting
-  indicatorSettingModalParams: { visible: boolean, indicatorName: string, paneId: string, calcParams: any[] }
+  indicatorSettingModalParams: { visible: boolean, indicatorName: string, paneId: string, calcParams: any[], extendData?: any }
   onIndicatorSettingModalClose: () => void
   onIndicatorSettingConfirm: (params: any[]) => void
+
+  // Pine Editor
+  pineEditorVisible: boolean
+  onPineEditorClose: () => void
+  onPineEditorApply: (code: string) => void
 }
 
 const ChartModals: Component<ChartModalsProps> = props => {
@@ -116,6 +122,14 @@ const ChartModals: Component<ChartModalsProps> = props => {
           params={props.indicatorSettingModalParams}
           onClose={props.onIndicatorSettingModalClose}
           onConfirm={props.onIndicatorSettingConfirm}
+        />
+      </Show>
+      <Show when={props.pineEditorVisible}>
+        <PineEditorModal
+          locale={props.locale}
+          visible={props.pineEditorVisible}
+          onClose={props.onPineEditorClose}
+          onApply={props.onPineEditorApply}
         />
       </Show>
     </>

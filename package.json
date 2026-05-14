@@ -66,6 +66,7 @@
     "vitest": "^0.28.4"
   },
   "dependencies": {
+    "@simahfud/pine-to-kline": "^0.1.3",
     "lodash": "^4.17.21",
     "solid-js": "^1.6.11"
   },

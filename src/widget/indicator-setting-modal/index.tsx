@@ -24,7 +24,7 @@ import data from './data'
 
 export interface IndicatorSettingModalProps {
   locale: string
-  params: { indicatorName: string, paneId: string, calcParams: any[] }
+  params: { indicatorName: string, paneId: string, calcParams: any[], extendData?: any }
   onClose: () => void
   onConfirm: (calcParams: any) => void
 }
@@ -34,7 +34,20 @@ const IndicatorSettingModal: Component<IndicatorSettingModalProps> = props => {
 
   const getConfig: (name: string) => any[] = (name: string) => {
     // @ts-expect-error
-    return data[name]
+    let config = data[name]
+    if (!config) {
+      // Fallback for custom indicators (like Pine Script)
+      config = props.params.calcParams.map((param, index) => {
+        const title = props.params.extendData?.pineInputs?.[index] || `Param ${index + 1}`
+        return {
+          paramNameKey: title,
+          precision: typeof param === 'number' && !Number.isInteger(param) ? 2 : 0,
+          min: typeof param === 'number' ? -99999 : undefined,
+          default: param
+        }
+      })
+    }
+    return config
   }
 
   return (

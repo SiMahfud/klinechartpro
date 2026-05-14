@@ -9,6 +9,7 @@ export interface BottomBarProps {
   locale: string
   timezone: string
   onGotoDate: (timestamp: number) => void
+  onPineEditorClick: () => void
   onTimezoneClick: () => void
 }
 
@@ -125,6 +126,15 @@ const BottomBar: Component<BottomBarProps> = props => {
           </div>
         )}
       </div>
+
+      {/* Pine Script Editor Button */}
+      <button
+        class="bottom-bar-icon-btn"
+        title="Pine Script Editor"
+        onClick={() => props.onPineEditorClick()}
+        style={{ "margin-left": "8px", "font-weight": "bold", "font-size": "12px", "padding": "0 6px", "color": "var(--klinecharts-pro-primary-color)" }}>
+        Pine
+      </button>
 
       {/* Separator */}
       <span class="bottom-bar-sep">|</span>
