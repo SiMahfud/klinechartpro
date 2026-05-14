@@ -15,9 +15,10 @@ export interface UseChartDataProps {
   initialChartType?: string
   initialRenkoBrickSize?: number
   initialRangeBarSize?: number
+  onDataUpdate?: (data: KLineData) => void
 }
 
-function adjustFromTo(period: Period, toTimestamp: number, count: number): [number, number] {
+export function adjustFromTo(period: Period, toTimestamp: number, count: number): [number, number] {
   let to = toTimestamp
   let from = to
   switch (period.timespan) {
@@ -196,6 +197,7 @@ export function useChartData(props: UseChartDataProps) {
             } else {
               widget?.updateData(data)
             }
+            props.onDataUpdate?.(data)
           }
         })
         

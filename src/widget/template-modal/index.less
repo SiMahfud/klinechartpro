@@ -1,0 +1,94 @@
+.klinecharts-pro-template-modal-content {
+  padding: 12px;
+
+  .template-save-form {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+
+    input {
+      flex: 1;
+    }
+
+    .save-btn {
+      padding: 0 16px;
+      height: 32px;
+      line-height: 32px;
+      border-radius: 2px;
+      border: none;
+      background-color: var(--klinecharts-pro-primary-color);
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      transition: opacity 0.2s;
+
+      &:hover {
+        opacity: 0.8;
+      }
+    }
+  }
+
+  .template-list {
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid var(--klinecharts-pro-border-color);
+    border-radius: 4px;
+
+    .no-templates {
+      padding: 16px;
+      text-align: center;
+      color: var(--klinecharts-pro-text-third-color);
+    }
+
+    .template-item {
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--klinecharts-pro-border-color);
+      transition: background-color 0.2s;
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      &:hover {
+        background-color: var(--klinecharts-pro-hover-background-color);
+      }
+
+      .template-name {
+        flex: 1;
+        cursor: pointer;
+        font-weight: 500;
+        color: var(--klinecharts-pro-text-color);
+        
+        &:hover {
+          color: var(--klinecharts-pro-primary-color);
+        }
+      }
+
+      .template-date {
+        font-size: 12px;
+        color: var(--klinecharts-pro-text-third-color);
+        margin-right: 12px;
+      }
+
+      .delete-btn {
+        background: transparent;
+        border: none;
+        color: var(--klinecharts-pro-text-third-color);
+        cursor: pointer;
+        font-size: 14px;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+
+        &:hover {
+          background-color: rgba(255, 77, 79, 0.1);
+          color: #ff4d4f;
+        }
+      }
+    }
+  }
+}

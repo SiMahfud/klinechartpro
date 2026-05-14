@@ -30,6 +30,9 @@ export interface PeriodBarProps {
   onPeriodChange: (period: Period) => void
   onChartTypeChange?: (type: string) => void
   onChartTypeSettingsClick?: () => void
+  onCompareClick?: () => void
+  onTemplateClick?: () => void
+  onLayoutClick?: () => void
   onIndicatorClick: () => void
   onTimezoneClick: () => void
   onSettingClick: () => void
@@ -116,6 +119,25 @@ const PeriodBar: Component<PeriodBarProps> = props => {
             ⚙
           </span>
         </Show>
+      </div>
+      <div class="item tools" onClick={() => props.onCompareClick?.()}>
+        <svg viewBox="0 0 20 20">
+          <path d="M10,2 L10,18 M2,10 L18,10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>{i18n('compare', props.locale) || 'Compare'}</span>
+      </div>
+      <div class="item tools" onClick={() => props.onTemplateClick?.()}>
+        <svg viewBox="0 0 20 20">
+          <path d="M3,4 h14 v12 h-14 z M3,8 h14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
+        <span>{i18n('template', props.locale) || 'Templates'}</span>
+      </div>
+      <div class="item tools" onClick={() => props.onLayoutClick?.()}>
+        <svg viewBox="0 0 20 20">
+          <rect x="3" y="4" width="6" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          <rect x="11" y="4" width="6" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
+        <span>{i18n('layout', props.locale) || 'Layout'}</span>
       </div>
       <div
         class='item tools'

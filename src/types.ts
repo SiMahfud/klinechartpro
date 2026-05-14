@@ -89,6 +89,7 @@ export interface ChartProOptions {
   onError?: (error: Error) => void
   onSettingsChange?: (settings: any) => void
   onDrawingsChange?: (ticker: string, drawings: any[]) => void
+  onLayoutClick?: () => void
 }
 
 export interface ChartPro {
@@ -124,4 +125,5 @@ export interface ChartPro {
   setSettings?(settings: any): void
   getDrawings?(ticker: string): any[]
   setDrawings?(ticker: string, drawings: any[]): void
+  getWidget?(): any
 }

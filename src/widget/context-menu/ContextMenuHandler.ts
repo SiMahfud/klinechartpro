@@ -16,6 +16,9 @@ export interface ContextMenuActionParams {
   setScreenshotUrl: (url: string) => void
   setContextMenuVisible: (visible: boolean) => void
   saveDrawings: () => void
+  setAlertModalVisible?: (visible: boolean) => void
+  setPerformancePanelVisible?: (visible: boolean) => void
+  performancePanelVisible?: boolean
 }
 
 export function handleContextMenuAction(params: ContextMenuActionParams) {
@@ -23,7 +26,8 @@ export function handleContextMenuAction(params: ContextMenuActionParams) {
     key, overlayId, widget, widgetRef, theme, gridVisible,
     setGridVisible, setStyleEditorOverlayId, setStyleEditorCurrentStyles,
     setStyleEditorVisible, setIndicatorModalVisible, setSettingModalVisible,
-    setScreenshotUrl, setContextMenuVisible, saveDrawings
+    setScreenshotUrl, setContextMenuVisible, saveDrawings,
+    setAlertModalVisible, setPerformancePanelVisible, performancePanelVisible
   } = params
 
   switch (key) {
@@ -67,6 +71,12 @@ export function handleContextMenuAction(params: ContextMenuActionParams) {
     // --- Chart area actions ---
     case 'add_indicator':
       setIndicatorModalVisible(true)
+      break
+    case 'add_alert':
+      setAlertModalVisible?.(true)
+      break
+    case 'toggle_perf':
+      setPerformancePanelVisible?.(!performancePanelVisible)
       break
     case 'chart_settings':
       setSettingModalVisible(true)

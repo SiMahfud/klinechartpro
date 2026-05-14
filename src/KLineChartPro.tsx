@@ -83,7 +83,8 @@ export default class KLineChartPro implements ChartPro {
           rangeBarSize={options.rangeBarSize}
           onError={options.onError ?? (() => {})}
           onSettingsChange={options.onSettingsChange}
-          onDrawingsChange={options.onDrawingsChange}/>
+          onDrawingsChange={options.onDrawingsChange}
+          onLayoutClick={options.onLayoutClick}/>
       ),
       this._container
     )
@@ -169,6 +170,10 @@ export default class KLineChartPro implements ChartPro {
 
   setDrawings (ticker: string, drawings: any[]): void {
     this._chartApi?.setDrawings?.(ticker, drawings)
+  }
+
+  getWidget (): any {
+    return this._chartApi?.getWidget?.()
   }
 
   destroy (): void {

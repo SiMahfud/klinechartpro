@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-import { Component, createSignal, onMount, onCleanup } from 'solid-js'
+import { Component, createSignal, onMount, onCleanup, Show } from 'solid-js'
 
 export interface PerformancePanelProps {
   visible: boolean
@@ -54,31 +54,31 @@ const PerformancePanel: Component<PerformancePanelProps> = props => {
     cancelAnimationFrame(rafId)
   })
 
-  if (!props.visible) return null
-
   return (
-    <div class="klinecharts-pro-performance-panel">
-      <div class="perf-item">
-        <span class="perf-label">FPS</span>
-        <span class="perf-value" style={{ color: fps() >= 30 ? '#52c41a' : '#ff4d4f' }}>
-          {fps()}
-        </span>
+    <Show when={props.visible}>
+      <div class="klinecharts-pro-performance-panel">
+        <div class="perf-item">
+          <span class="perf-label">FPS</span>
+          <span class="perf-value" style={{ color: fps() >= 30 ? '#52c41a' : '#ff4d4f' }}>
+            {fps()}
+          </span>
+        </div>
+        <div class="perf-item">
+          <span class="perf-label">Data</span>
+          <span class="perf-value">{props.dataPointCount ?? 0}</span>
+        </div>
+        <div class="perf-item">
+          <span class="perf-label">WS</span>
+          <span class="perf-value">
+            {props.wsLatency !== undefined ? `${props.wsLatency}ms` : '—'}
+          </span>
+        </div>
+        <div class="perf-item">
+          <span class="perf-label">Mem</span>
+          <span class="perf-value">{memory()}</span>
+        </div>
       </div>
-      <div class="perf-item">
-        <span class="perf-label">Data</span>
-        <span class="perf-value">{props.dataPointCount ?? 0}</span>
-      </div>
-      <div class="perf-item">
-        <span class="perf-label">WS</span>
-        <span class="perf-value">
-          {props.wsLatency !== undefined ? `${props.wsLatency}ms` : '—'}
-        </span>
-      </div>
-      <div class="perf-item">
-        <span class="perf-label">Mem</span>
-        <span class="perf-value">{memory()}</span>
-      </div>
-    </div>
+    </Show>
   )
 }
 

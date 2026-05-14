@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-import { createSignal, createEffect, onMount, Show, onCleanup, startTransition, Component, on, untrack } from 'solid-js'
+import { createSignal, createEffect, onMount, Show, onCleanup, startTransition, Component, on, untrack, For } from 'solid-js'
 
 import {
   init, dispose, utils, Nullable, Chart, OverlayMode, Styles,
@@ -40,19 +40,25 @@ import type { DrawingStyleValues } from './widget/drawing-style-editor'
 import ContextMenu from './widget/context-menu'
 import type { ContextMenuItem } from './widget/context-menu'
 import { handleContextMenuAction } from './widget/context-menu/ContextMenuHandler'
+import AlertModal, { evaluateAlerts } from './widget/alert-modal'
+import PerformancePanel from './widget/performance-panel'
+import TemplateModal from './widget/template-modal'
+import { ComparisonManager } from './comparison'
+import { ChartTemplateManager } from './chart-template'
 import { KeyboardShortcutManager } from './keyboard-shortcuts'
 import { useReplayManager } from './widget/replay-bar/useReplayManager'
 import i18n from './i18n'
-import { useChartData } from './hooks/useChartData'
+import { useChartData, adjustFromTo } from './hooks/useChartData'
 
 import { translateTimezone } from './widget/timezone-modal/data'
 
 import { SymbolInfo, Period, ChartProOptions, ChartPro } from './types'
 
-export interface ChartProComponentProps extends Required<Omit<ChartProOptions, 'container' | 'onSettingsChange' | 'onDrawingsChange' | 'chartType' | 'renkoBrickSize' | 'rangeBarSize'>> {
+export interface ChartProComponentProps extends Required<Omit<ChartProOptions, 'container' | 'onSettingsChange' | 'onDrawingsChange' | 'onLayoutClick' | 'chartType' | 'renkoBrickSize' | 'rangeBarSize'>> {
   ref: (chart: ChartPro) => void
   onSettingsChange?: (settings: any) => void
   onDrawingsChange?: (ticker: string, drawings: any[]) => void
+  onLayoutClick?: () => void
   chartType?: string
   renkoBrickSize?: number
   rangeBarSize?: number
@@ -122,6 +128,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
   const [drawingBarVisible, setDrawingBarVisible] = createSignal(props.drawingBarVisible)
 
   const [symbolSearchModalVisible, setSymbolSearchModalVisible] = createSignal(false)
+  const [symbolSearchMode, setSymbolSearchMode] = createSignal<'main' | 'compare'>('main')
 
   const [loadingVisible, setLoadingVisible] = createSignal(false)
 
@@ -130,6 +137,21 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
   })
 
   const [chartTypeSettingsVisible, setChartTypeSettingsVisible] = createSignal(false)
+
+  // New features states
+  const [alertModalVisible, setAlertModalVisible] = createSignal(false)
+  const [alerts, setAlerts] = createSignal<any[]>([])
+  let previousPriceRef = 0
+
+  const [performancePanelVisible, setPerformancePanelVisible] = createSignal(false)
+  const [dataPointCount, setDataPointCount] = createSignal(0)
+  
+  let comparisonManager: ComparisonManager | null = null
+  const [comparisonSymbols, setComparisonSymbols] = createSignal<any[]>([])
+
+  const chartTemplateManager = new ChartTemplateManager(store)
+  const [templateModalVisible, setTemplateModalVisible] = createSignal(false)
+  const [templates, setTemplates] = createSignal<any[]>(chartTemplateManager.getTemplates())
 
   // Datafeed and Chart Type Hook
   const {
@@ -150,7 +172,23 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     store,
     initialChartType: props.chartType,
     initialRenkoBrickSize: props.renkoBrickSize,
-    initialRangeBarSize: props.rangeBarSize
+    initialRangeBarSize: props.rangeBarSize,
+    onDataUpdate: (data) => {
+      // Evaluate alerts
+      if (previousPriceRef > 0) {
+        const triggeredIds = evaluateAlerts(alerts(), data.close, previousPriceRef)
+        if (triggeredIds.length > 0) {
+          // Re-render alerts list to show triggered status
+          setAlerts([...alerts()])
+        }
+      }
+      previousPriceRef = data.close
+      
+      // Update data point count for performance panel
+      if (performancePanelVisible()) {
+        setDataPointCount(widget?.getDataList()?.length || 0)
+      }
+    }
   })
 
   // Replay
@@ -184,6 +222,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
   const [contextMenuVisible, setContextMenuVisible] = createSignal(false)
   const [contextMenuX, setContextMenuX] = createSignal(0)
   const [contextMenuY, setContextMenuY] = createSignal(0)
+  const [contextMenuPrice, setContextMenuPrice] = createSignal(0)
   const [contextMenuOverlayId, setContextMenuOverlayId] = createSignal('')
   const [contextMenuMode, setContextMenuMode] = createSignal<'overlay' | 'chart'>('chart')
   const [gridVisible, setGridVisible] = createSignal(true)
@@ -281,7 +320,8 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         widget?.removeOverlay()
         drawings.forEach((d: any) => createOverlayWithMenu(d))
       }
-    }
+    },
+    getWidget: () => widget
   })
 
   const documentResize = () => {
@@ -426,6 +466,12 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       saveDrawings()
     })
 
+    // Initialize Comparison Manager
+    comparisonManager = new ComparisonManager(widget, props.datafeed)
+    comparisonManager.setOnChange(() => {
+      setComparisonSymbols(comparisonManager!.getSymbols())
+    })
+
     loadDrawings()
   })
 
@@ -433,6 +479,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     saveDrawings()
     window.removeEventListener('resize', documentResize)
     shortcutManager?.destroy()
+    comparisonManager?.destroy()
     ;(window as any)._klineChartInstance = null
     dispose(widgetRef!)
   })
@@ -705,7 +752,16 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         symbolSearchModalVisible={symbolSearchModalVisible()}
         datafeed={props.datafeed}
         onSymbolSearchClose={() => setSymbolSearchModalVisible(false)}
-        onSymbolSelected={(sym) => setSymbol(sym)}
+        onSymbolSelected={(sym) => {
+          if (symbolSearchMode() === 'main') {
+            setSymbol(sym)
+          } else {
+            const p = period()
+            const now = new Date().getTime()
+            const [from, to] = adjustFromTo(p, now, 500)
+            comparisonManager?.addSymbol(sym, p, from, to)
+          }
+        }}
         indicatorModalVisible={indicatorModalVisible()}
         mainIndicators={mainIndicators()}
         subIndicators={subIndicators()}
@@ -791,9 +847,11 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
             : [
                 { key: 'add_indicator', label: i18n('add_indicator', props.locale), icon: '📊' },
                 { key: 'chart_settings', label: i18n('chart_settings', props.locale), icon: '⚙️' },
+                { key: 'add_alert', label: i18n('price_alert', props.locale), icon: '🔔' },
                 { key: 'screenshot', label: i18n('screenshot', props.locale), icon: '📸' },
                 { key: 'sep1', label: '', separator: true },
                 { key: 'toggle_grid', label: i18n(gridVisible() ? 'hide_grid' : 'show_grid', props.locale), icon: gridVisible() ? '▦' : '▢' },
+                { key: 'toggle_perf', label: 'Performance Panel', icon: '📈' },
                 { key: 'goto_date', label: i18n('goto_date', props.locale), icon: '📅' },
                 { key: 'go_to_latest', label: i18n('go_to_latest', props.locale), icon: '🏠' },
                 { key: 'sep2', label: '', separator: true },
@@ -819,7 +877,10 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
               setSettingModalVisible,
               setScreenshotUrl,
               setContextMenuVisible,
-              saveDrawings
+              saveDrawings,
+              setAlertModalVisible,
+              setPerformancePanelVisible,
+              performancePanelVisible: performancePanelVisible()
             })
           }}
           onClose={() => setContextMenuVisible(false)}
@@ -872,7 +933,25 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
             widget?.resize()
           }, 50)
         }}
-        onSymbolClick={() => { setSymbolSearchModalVisible(!symbolSearchModalVisible()) }}
+        onSymbolClick={() => { 
+          setSymbolSearchMode('main')
+          setSymbolSearchModalVisible(!symbolSearchModalVisible()) 
+        }}
+        onCompareClick={() => {
+          setSymbolSearchMode('compare')
+          setSymbolSearchModalVisible(true)
+        }}
+        onTemplateClick={() => {
+          setTemplates(chartTemplateManager.getTemplates())
+          setTemplateModalVisible(true)
+        }}
+        onLayoutClick={() => {
+          if (props.onLayoutClick) {
+            props.onLayoutClick()
+          } else {
+            console.info('[klinecharts-pro] Layout: To use multi-chart layout, pass an onLayoutClick callback to ChartProOptions.')
+          }
+        }}
         onPeriodChange={setPeriod}
         onChartTypeChange={setChartType}
         onChartTypeSettingsClick={() => setChartTypeSettingsVisible(true)}
@@ -916,6 +995,18 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
             e.preventDefault()
             setContextMenuX(e.clientX)
             setContextMenuY(e.clientY)
+            // Convert mouse Y to price at cursor position
+            try {
+              const rect = (widgetRef as unknown as HTMLDivElement)?.getBoundingClientRect()
+              if (rect && widget) {
+                const relativeY = e.clientY - rect.top
+                const coords = (widget as any).convertFromPixel([{ y: relativeY }], { paneId: 'candle_pane' })
+                const firstCoord = Array.isArray(coords) ? coords[0] : coords
+                if (firstCoord && typeof firstCoord.value === 'number') {
+                  setContextMenuPrice(firstCoord.value)
+                }
+              }
+            } catch { /* ignore */ }
             // Check if there's a selected overlay
             const overlayId = styleEditorOverlayId()
             if (overlayId) {
@@ -938,6 +1029,29 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
             onCancel={() => cancelReplaySelection()}
           />
         </Show>
+        
+        <Show when={comparisonSymbols().length > 0}>
+          <div class="klinecharts-pro-comparison-legend" style={{ position: 'absolute', top: '60px', left: '10px', 'z-index': 10, display: 'flex', 'flex-direction': 'column', gap: '4px' }}>
+            <For each={comparisonSymbols()}>
+              {(sym: any) => (
+                <div style={{ display: 'flex', 'align-items': 'center', background: 'rgba(0,0,0,0.5)', color: sym.color, padding: '4px 8px', 'border-radius': '4px', 'font-size': '12px' }}>
+                  <span style={{ 'margin-right': '8px' }}>{sym.symbol.shortName || sym.symbol.ticker}</span>
+                  <Show when={sym.normalizedData && sym.normalizedData.length > 0}>
+                    <span style={{ 'margin-right': '8px' }}>
+                      {sym.normalizedData[sym.normalizedData.length - 1].value > 0 ? '+' : ''}{sym.normalizedData[sym.normalizedData.length - 1].value.toFixed(2)}%
+                    </span>
+                  </Show>
+                  <button onClick={() => comparisonManager?.removeSymbol(sym.symbol.ticker)} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}>✕</button>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
+        {/* Performance Panel */}
+        <PerformancePanel 
+          visible={performancePanelVisible()} 
+          dataPointCount={dataPointCount()} 
+        />
       </div>
       {/* Replay Bar */}
       <Show when={replayActive()}>
@@ -956,6 +1070,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           onExit={stopReplay}
         />
       </Show>
+
       {/* Bottom Status Bar */}
       <BottomBar
         locale={props.locale}
@@ -963,6 +1078,76 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         onGotoDate={gotoDate}
         onTimezoneClick={() => { setTimezoneModalVisible(v => !v) }}
       />
+      
+      {/* Template Modal */}
+      <Show when={templateModalVisible()}>
+        <TemplateModal
+          locale={props.locale}
+          templates={templates()}
+          onClose={() => setTemplateModalVisible(false)}
+          onSaveTemplate={(name) => {
+            chartTemplateManager.saveTemplate({
+              name,
+              mainIndicators: mainIndicators(),
+              subIndicators: Object.keys(subIndicators()),
+              styles: styles(),
+              period: period(),
+              theme: props.theme,
+              createdAt: Date.now()
+            })
+            setTemplates(chartTemplateManager.getTemplates())
+          }}
+          onLoadTemplate={(name) => {
+            const template = chartTemplateManager.loadTemplate(name)
+            if (template) {
+              if (template.theme) setTheme(template.theme)
+              if (template.styles) setStyles(template.styles)
+              if (template.period) setPeriod(template.period)
+              setMainIndicators(template.mainIndicators || [])
+              
+              // Handle subIndicators which requires pane mapping
+              const currentSubs = subIndicators()
+              const newSubs: Record<string, string> = {}
+              const toAdd = (template.subIndicators || []).filter(ind => !currentSubs[ind])
+              const toRemove = Object.keys(currentSubs).filter(ind => !(template.subIndicators || []).includes(ind))
+              
+              // Remove old
+              toRemove.forEach(ind => {
+                widget?.removeIndicator(currentSubs[ind], ind)
+              })
+              // Keep existing
+              Object.keys(currentSubs).forEach(ind => {
+                if (!toRemove.includes(ind)) newSubs[ind] = currentSubs[ind]
+              })
+              // Add new
+              toAdd.forEach(ind => {
+                const paneId = createIndicator(widget, ind, true, undefined, symbol().volumePrecision)
+                if (paneId) newSubs[ind] = paneId
+              })
+              
+              setSubIndicators(newSubs)
+              setTemplateModalVisible(false)
+            }
+          }}
+          onDeleteTemplate={(name) => {
+            chartTemplateManager.deleteTemplate(name)
+            setTemplates(chartTemplateManager.getTemplates())
+          }}
+        />
+      </Show>
+
+      {/* Alert Modal */}
+      <Show when={alertModalVisible()}>
+        <AlertModal
+          locale={props.locale}
+          currentPrice={contextMenuPrice() || previousPriceRef || 0}
+          symbolTicker={symbol().ticker}
+          alerts={alerts()}
+          onClose={() => setAlertModalVisible(false)}
+          onCreateAlert={(alert) => setAlerts([...alerts(), alert])}
+          onRemoveAlert={(id) => setAlerts(alerts().filter(a => a.id !== id))}
+        />
+      </Show>
     </>
   )
 }
