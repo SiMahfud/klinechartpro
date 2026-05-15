@@ -34,6 +34,8 @@ export interface ChartModalsProps {
   onIndicatorModalClose: () => void
   onMainIndicatorChange: (data: any) => void
   onSubIndicatorChange: (data: any) => void
+  onDeleteCustomIndicator?: (name: string) => void
+  onEditCustomIndicator?: (name: string) => void
 
   // Timezone
   timezoneModalVisible: boolean
@@ -59,6 +61,7 @@ export interface ChartModalsProps {
 
   // Pine Editor
   pineEditorVisible: boolean
+  pineEditorInitialCode?: string
   onPineEditorClose: () => void
   onPineEditorApply: (code: string) => void
 }
@@ -90,7 +93,9 @@ const ChartModals: Component<ChartModalsProps> = props => {
           subIndicators={props.subIndicators}
           onClose={props.onIndicatorModalClose}
           onMainIndicatorChange={props.onMainIndicatorChange}
-          onSubIndicatorChange={props.onSubIndicatorChange}/>
+          onSubIndicatorChange={props.onSubIndicatorChange}
+          onDeleteCustomIndicator={props.onDeleteCustomIndicator}
+          onEditCustomIndicator={props.onEditCustomIndicator}/>
       </Show>
       <Show when={props.timezoneModalVisible}>
         <TimezoneModal
@@ -128,6 +133,7 @@ const ChartModals: Component<ChartModalsProps> = props => {
         <PineEditorModal
           locale={props.locale}
           visible={props.pineEditorVisible}
+          initialCode={props.pineEditorInitialCode}
           onClose={props.onPineEditorClose}
           onApply={props.onPineEditorApply}
         />

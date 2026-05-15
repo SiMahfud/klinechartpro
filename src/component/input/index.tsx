@@ -57,7 +57,7 @@ const Input: Component<InputProps> = p => {
             let reg
             const decimalDigit = Math.max(0, Math.floor(props.precision!))
             if (decimalDigit <= 0) {
-              reg = new RegExp(/^[1-9]\d*$/)
+              reg = new RegExp(/^(0|[1-9]\d*)$/)
             } else {
               reg = new RegExp('^\\d+\\.?\\d{0,' + decimalDigit + '}$')
             }

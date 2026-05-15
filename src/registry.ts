@@ -40,6 +40,15 @@ class Registry {
     }
   }
 
+  /** Remove a custom indicator from UI display */
+  removeIndicator (name: string): void {
+    const initialLength = this._customIndicators.length
+    this._customIndicators = this._customIndicators.filter(i => i.name !== name)
+    if (this._customIndicators.length !== initialLength) {
+      this._notify()
+    }
+  }
+
   /** Register a custom overlay for UI display */
   addOverlay (item: CustomRegistryItem): void {
     if (!this._customOverlays.find(o => o.name === item.name)) {

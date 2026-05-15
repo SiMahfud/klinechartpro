@@ -26,6 +26,7 @@ interface StoredPreferences {
   styles?: Record<string, any>
   drawings?: Record<string, any[]>
   alerts?: AlertConfig[]
+  customScripts?: Record<string, string>
 }
 
 /**
@@ -140,6 +141,24 @@ export class ChartStore {
     this.setAlerts(alerts)
   }
 
+  // --- Custom Scripts (PineScript) ---
+  getCustomScripts (): Record<string, string> {
+    return this._get<Record<string, string>>('customScripts') ?? {}
+  }
+  setCustomScripts (scripts: Record<string, string>): void {
+    this._set('customScripts', scripts)
+  }
+  addCustomScript (name: string, script: string): void {
+    const scripts = this.getCustomScripts()
+    scripts[name] = script
+    this.setCustomScripts(scripts)
+  }
+  removeCustomScript (name: string): void {
+    const scripts = this.getCustomScripts()
+    delete scripts[name]
+    this.setCustomScripts(scripts)
+  }
+
   // --- Bulk ---
   getAll (): StoredPreferences {
     return {
@@ -150,13 +169,14 @@ export class ChartStore {
       period: this.getPeriod() ?? undefined,
       mainIndicators: this.getMainIndicators() ?? undefined,
       styles: this.getStyles() ?? undefined,
-      alerts: this.getAlerts()
+      alerts: this.getAlerts(),
+      customScripts: this.getCustomScripts()
     }
   }
 
   clear (): void {
     const keys = ['theme', 'locale', 'timezone', 'symbol', 'period',
-      'mainIndicators', 'subIndicators', 'styles', 'drawings', 'alerts']
+      'mainIndicators', 'subIndicators', 'styles', 'drawings', 'alerts', 'customScripts']
     keys.forEach(key => this._remove(key))
   }
 }

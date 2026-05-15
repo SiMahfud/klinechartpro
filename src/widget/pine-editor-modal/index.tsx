@@ -1,4 +1,4 @@
-import { Component, createSignal } from 'solid-js'
+import { Component, createSignal, createEffect } from 'solid-js'
 import { Modal } from '../../component'
 import i18n from '../../i18n'
 
@@ -7,6 +7,7 @@ export interface PineEditorModalProps {
   visible: boolean
   onClose: () => void
   onApply: (code: string) => void
+  initialCode?: string
 }
 
 const DEFAULT_PINE = `//@version=5
@@ -16,7 +17,13 @@ plot(ta.sma(close, length), "SMA", color=color.blue, linewidth=2)
 `
 
 const PineEditorModal: Component<PineEditorModalProps> = props => {
-  const [code, setCode] = createSignal(DEFAULT_PINE)
+  const [code, setCode] = createSignal(props.initialCode || DEFAULT_PINE)
+
+  createEffect(() => {
+    if (props.visible) {
+      setCode(props.initialCode || DEFAULT_PINE)
+    }
+  })
 
   return (
     <Modal

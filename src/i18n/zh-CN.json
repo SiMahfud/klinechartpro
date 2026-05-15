@@ -37,6 +37,12 @@
   "roc": "ROC(变动率指标)",
   "pvt": "PVT(价量趋势指标)",
   "ao": "AO(动量震荡指标)",
+  "cvd": "CVD(累积成交量差值)",
+  "cvd_ma_period": "均线周期",
+  "cvd_reset_mode": "重置 (0=无, 1=每日, 2=每周)",
+  "cvd_show_ma": "显示均线 (1=是, 0=否)",
+  "cvd_show_divergence": "显示背离 (1=是, 0=否)",
+  "cvd_div_lookback": "背离回溯期",
 
   "utc": "世界统一时间",
   "honolulu": "(UTC-10) 檀香山",

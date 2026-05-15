@@ -137,5 +137,12 @@ export default {
     { paramNameKey: 'WR3', precision: 0, min: 1, styleKey: 'lines[2].color' },
     { paramNameKey: 'WR4', precision: 0, min: 1, styleKey: 'lines[3].color' },
     { paramNameKey: 'WR5', precision: 0, min: 1, styleKey: 'lines[4].color' },
+  ],
+  CVD: [
+    { paramNameKey: 'cvd_ma_period', precision: 0, min: 1, default: 20 },
+    { paramNameKey: 'cvd_reset_mode', precision: 0, min: 0, default: 0 },
+    { paramNameKey: 'cvd_show_ma', precision: 0, min: 0, default: 1 },
+    { paramNameKey: 'cvd_show_divergence', precision: 0, min: 0, default: 1 },
+    { paramNameKey: 'cvd_div_lookback', precision: 0, min: 2, default: 5 }
   ]
 }

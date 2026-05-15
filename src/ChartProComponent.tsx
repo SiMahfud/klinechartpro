@@ -53,6 +53,7 @@ import { useChartData, adjustFromTo } from './hooks/useChartData'
 
 import { translateTimezone } from './widget/timezone-modal/data'
 import { createPinePlugin } from '@simahfud/pine-to-kline'
+import { customRegistry } from './registry'
 
 import { SymbolInfo, Period, ChartProOptions, ChartPro } from './types'
 
@@ -157,17 +158,28 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
 
   // Pine Script Integration
   const [pineEditorVisible, setPineEditorVisible] = createSignal(false)
+  const [pineEditorInitialCode, setPineEditorInitialCode] = createSignal<string | undefined>(undefined)
   const pineAPI = createPinePlugin()
 
-  const handlePineEditorApply = (code: string) => {
+  const handlePineEditorApply = async (code: string) => {
     try {
-      const result = pineAPI.compile(code)
+      const result = await pineAPI.compile(code)
       if (!result.success) {
         throw result.errors[0]
       }
       
       // Register into klinecharts core
       registerIndicator(result.indicatorConfig as any)
+
+      // Save script to store
+      store.addCustomScript(result.name, code)
+      
+      // Add to customRegistry
+      customRegistry.addIndicator({
+        name: result.name,
+        label: result.name,
+        paneType: result.indicatorConfig.series === 'price' ? 'main' : 'sub'
+      })
       
       // Add to chart
       if (result.indicatorConfig.series === 'price') {
@@ -197,6 +209,31 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       }
     } catch (e: any) {
       alert(`Pine Script Error:\n\n${e.message}`)
+    }
+  }
+
+  const handleDeleteCustomIndicator = (name: string) => {
+    store.removeCustomScript(name)
+    customRegistry.removeIndicator(name)
+
+    // Remove from chart if active
+    if (mainIndicators().includes(name)) {
+      widget?.removeIndicator('candle_pane', name)
+      setMainIndicators(mainIndicators().filter(i => i !== name))
+    }
+    if (subIndicators()[name]) {
+      widget?.removeIndicator(subIndicators()[name], name)
+      const newSub = { ...subIndicators() }
+      delete newSub[name]
+      setSubIndicators(newSub)
+    }
+  }
+
+  const handleEditCustomIndicator = (name: string) => {
+    const scripts = store.getCustomScripts()
+    if (scripts[name]) {
+      setPineEditorInitialCode(scripts[name])
+      setPineEditorVisible(true)
     }
   }
 
@@ -436,6 +473,25 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       priceUnitDom.className = 'klinecharts-pro-price-unit'
       priceUnitContainer?.appendChild(priceUnitDom)
     }
+
+    // --- Load Custom Scripts ---
+    const customScripts = store.getCustomScripts()
+    Object.keys(customScripts).forEach(async name => {
+      try {
+        const script = customScripts[name]
+        const result = await pineAPI.compile(script)
+        if (result.success) {
+          registerIndicator(result.indicatorConfig as any)
+          customRegistry.addIndicator({
+            name: result.name,
+            label: result.name,
+            paneType: result.indicatorConfig.series === 'price' ? 'main' : 'sub'
+          })
+        }
+      } catch (e) {
+        console.warn(`[ChartPro] Failed to compile custom script ${name}:`, e)
+      }
+    })
 
     mainIndicators().forEach(indicator => {
       createIndicator(widget, indicator, true, { id: 'candle_pane' }, symbol().pricePrecision)
@@ -867,8 +923,14 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           widget?.overrideIndicator({ name: indicatorSettingModalParams().indicatorName, calcParams: params }, indicatorSettingModalParams().paneId)
         }}
         pineEditorVisible={pineEditorVisible()}
-        onPineEditorClose={() => setPineEditorVisible(false)}
+        pineEditorInitialCode={pineEditorInitialCode()}
+        onPineEditorClose={() => {
+          setPineEditorVisible(false)
+          setPineEditorInitialCode(undefined)
+        }}
         onPineEditorApply={handlePineEditorApply}
+        onDeleteCustomIndicator={handleDeleteCustomIndicator}
+        onEditCustomIndicator={handleEditCustomIndicator}
       />
       {/* Context Menu */}
       <Show when={contextMenuVisible()}>

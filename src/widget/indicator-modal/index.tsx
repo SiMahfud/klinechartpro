@@ -35,6 +35,8 @@ export interface IndicatorModalProps {
   subIndicators: Record<string, string>
   onMainIndicatorChange: OnIndicatorChange
   onSubIndicatorChange: OnIndicatorChange
+  onDeleteCustomIndicator?: (name: string) => void
+  onEditCustomIndicator?: (name: string) => void
   onClose: () => void
 }
 
@@ -83,10 +85,15 @@ const IndicatorModal: Component<IndicatorModalProps> = props => {
             return (
               <li
                 class="row"
+                style={{ "justify-content": 'space-between' }}
                 onClick={_ => {
                   props.onMainIndicatorChange({ name: item.name, paneId: 'candle_pane', added: !checked })
                 }}>
                 <Checkbox checked={checked} label={item.label}/>
+                <div style={{ display: 'flex', gap: '12px', "align-items": 'center' }} onClick={e => e.stopPropagation()}>
+                  <span title="Edit" onClick={() => props.onEditCustomIndicator?.(item.name)} style={{ cursor: 'pointer', "font-size": '16px' }}>✎</span>
+                  <span title="Delete" onClick={() => props.onDeleteCustomIndicator?.(item.name)} style={{ cursor: 'pointer', "font-size": '14px', color: '#ff4d4f' }}>✖</span>
+                </div>
               </li>
             )
           })
@@ -113,10 +120,15 @@ const IndicatorModal: Component<IndicatorModalProps> = props => {
             return (
               <li
                 class="row"
+                style={{ "justify-content": 'space-between' }}
                 onClick={_ => {
                   props.onSubIndicatorChange({ name: item.name, paneId: props.subIndicators[item.name] ?? '', added: !checked })
                 }}>
                 <Checkbox checked={checked} label={item.label}/>
+                <div style={{ display: 'flex', gap: '12px', "align-items": 'center' }} onClick={e => e.stopPropagation()}>
+                  <span title="Edit" onClick={() => props.onEditCustomIndicator?.(item.name)} style={{ cursor: 'pointer', "font-size": '16px' }}>✎</span>
+                  <span title="Delete" onClick={() => props.onDeleteCustomIndicator?.(item.name)} style={{ cursor: 'pointer', "font-size": '14px', color: '#ff4d4f' }}>✖</span>
+                </div>
               </li>
             )
           })

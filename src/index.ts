@@ -15,6 +15,7 @@
 import { registerOverlay, registerIndicator, OverlayTemplate, IndicatorTemplate } from 'klinecharts'
 
 import overlays from './extension'
+import builtInIndicators from './indicator'
 
 import DefaultDatafeed from './DefaultDatafeed'
 import KLineChartPro from './KLineChartPro'
@@ -39,6 +40,7 @@ import {
 import './index.less'
 
 overlays.forEach(o => { registerOverlay(o) })
+builtInIndicators.forEach(i => { registerIndicator(i) })
 
 export interface RegisterOverlayOptions {
   /** The klinecharts OverlayTemplate */
