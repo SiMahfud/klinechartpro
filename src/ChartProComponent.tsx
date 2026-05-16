@@ -249,7 +249,8 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     rangeBarSize,
     autoSizeValue,
     handleChartTypeSizeChange,
-    setupLoadMore
+    setupLoadMore,
+    loadHistoryUntil
   } = useChartData({
     getWidget: () => widget,
     datafeed: props.datafeed,
@@ -581,12 +582,31 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       setComparisonSymbols(comparisonManager!.getSymbols())
     })
 
+    const handleWheel = (e: WheelEvent) => {
+      if (e.shiftKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        widget?.scrollByDistance(e.deltaY * 0.5)
+      }
+    }
+    const widgetElement = widgetRef as unknown as HTMLDivElement
+    widgetElement?.addEventListener('wheel', handleWheel, { capture: true, passive: false })
+
     loadDrawings()
+
+    // Store handleWheel in widgetRef so we can remove it later
+    ;(widgetRef as any)._handleWheel = handleWheel
   })
 
   onCleanup(() => {
     saveDrawings()
     window.removeEventListener('resize', documentResize)
+    
+    const widgetElement = widgetRef as unknown as HTMLDivElement
+    if (widgetElement && (widgetElement as any)._handleWheel) {
+      widgetElement.removeEventListener('wheel', (widgetElement as any)._handleWheel, { capture: true })
+    }
+
     shortcutManager?.destroy()
     comparisonManager?.destroy()
     ;(window as any)._klineChartInstance = null
@@ -813,7 +833,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
 
 
   // --- Helper: go to date ---
-  const gotoDate = (timestamp: number) => {
+  const gotoDate = async (timestamp: number) => {
     if (!widget) return
     console.log(`[gotoDate] Target timestamp: ${timestamp} (${new Date(timestamp).toLocaleString()})`)
     
@@ -821,8 +841,15 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     widget.scrollToTimestamp(timestamp, 300)
     
     // Fallback/Verify: Find closest index and ensure it's visible
-    const dataList = widget.getDataList()
+    let dataList = widget.getDataList()
     if (dataList && dataList.length > 0) {
+      if (timestamp < dataList[0].timestamp) {
+        console.log('[gotoDate] Target date is BEFORE the earliest loaded data. Loading history automatically...')
+        await loadHistoryUntil(timestamp)
+        // Refresh dataList after loading
+        dataList = widget.getDataList()
+      }
+
       // Find closest bar
       let closestIdx = 0
       let minDiff = Infinity
@@ -835,11 +862,6 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       }
       
       console.log(`[gotoDate] Closest bar index: ${closestIdx}, time: ${new Date(dataList[closestIdx].timestamp).toLocaleString()}`)
-      
-      // If the target date is completely out of range (not loaded), log a warning
-      if (timestamp < dataList[0].timestamp) {
-        console.warn('[gotoDate] Target date is BEFORE the earliest loaded data. Please scroll back to load more history first.')
-      }
       
       // Scroll to that index explicitly (centers it or brings it into view)
       widget.scrollToDataIndex(closestIdx, 300)

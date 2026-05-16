@@ -149,6 +149,52 @@ export function useChartData(props: UseChartDataProps) {
     })
   }
 
+  // Load history until specific timestamp
+  const loadHistoryUntil = async (targetTimestamp: number) => {
+    const widget = props.getWidget()
+    if (!widget) return
+    
+    let currentData = widget.getDataList()
+    if (!currentData || currentData.length === 0) return
+    
+    let earliestTimestamp = currentData[0].timestamp
+    if (targetTimestamp >= earliestTimestamp) return
+    
+    props.setLoading(true)
+    props.setLoadingVisible(true)
+    const gen = dataGeneration
+    
+    try {
+      while (earliestTimestamp > targetTimestamp && gen === dataGeneration) {
+        const p = props.period()
+        const [to] = adjustFromTo(p, earliestTimestamp, 1)
+        // Request 1000 bars at a time to be efficient
+        const [from] = adjustFromTo(p, to, 1000)
+        
+        const kLineDataList = (await props.datafeed.getHistoryKLineData(props.symbol(), p, from, to)).filter(d => d.close > 0)
+        
+        if (kLineDataList.length === 0) break
+        
+        if (gen === dataGeneration) {
+          const ct = untrack(chartType)
+          if (isTransformChartType(ct)) {
+            rawDataCache = [...kLineDataList, ...rawDataCache]
+            const transformed = applyTransform(rawDataCache, ct, untrack(renkoBrickSize), untrack(rangeBarSize))
+            widget?.clearData()
+            widget?.applyNewData(transformed, true)
+          } else {
+            widget?.applyMoreData(kLineDataList, true)
+          }
+        }
+        
+        earliestTimestamp = kLineDataList[0].timestamp
+      }
+    } finally {
+      props.setLoading(false)
+      props.setLoadingVisible(false)
+    }
+  }
+
   // The main data loading effect
   createEffect(on([props.symbol, props.period], (current, prev) => {
     const [s, p] = current
@@ -218,6 +264,7 @@ export function useChartData(props: UseChartDataProps) {
     rangeBarSize,
     autoSizeValue,
     handleChartTypeSizeChange,
-    setupLoadMore
+    setupLoadMore,
+    loadHistoryUntil
   }
 }
