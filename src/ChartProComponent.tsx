@@ -72,11 +72,11 @@ interface PrevSymbolPeriod {
   period: Period
 }
 
-function createIndicator (widget: Nullable<Chart>, indicatorName: string, isStack?: boolean, paneOptions?: PaneOptions, precision?: number): Nullable<string> {
+function createIndicator (widget: Nullable<Chart>, indicatorName: string, isStack?: boolean, paneOptions?: PaneOptions, precision?: number, calcParams?: any[]): Nullable<string> {
   if (indicatorName === 'VOL') {
     paneOptions = { gap: { bottom: 2 }, ...paneOptions }
   }
-  return widget?.createIndicator({
+  const indicatorConfig: any = {
     name: indicatorName,
     precision,
     // @ts-expect-error
@@ -93,7 +93,11 @@ function createIndicator (widget: Nullable<Chart>, indicatorName: string, isStac
       }
       return { icons }
     }
-  }, isStack, paneOptions) ?? null
+  }
+  if (calcParams && calcParams.length > 0) {
+    indicatorConfig.calcParams = calcParams
+  }
+  return widget?.createIndicator(indicatorConfig, isStack, paneOptions) ?? null
 }
 
 const ChartProComponent: Component<ChartProComponentProps> = props => {
@@ -493,14 +497,15 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       }
     })
 
+    const savedCalcParams = store.getIndicatorCalcParams()
     mainIndicators().forEach(indicator => {
-      createIndicator(widget, indicator, true, { id: 'candle_pane' }, symbol().pricePrecision)
+      createIndicator(widget, indicator, true, { id: 'candle_pane' }, symbol().pricePrecision, savedCalcParams[indicator])
     })
     const storedSubIndicators = store.getSubIndicators()
     const subIndicatorNames = storedSubIndicators ? Object.keys(storedSubIndicators) : (props.subIndicators ?? [])
     const subIndicatorMap: Record<string, string> = {}
     subIndicatorNames.forEach(indicator => {
-      const paneId = createIndicator(widget, indicator, true, undefined, symbol().volumePrecision)
+      const paneId = createIndicator(widget, indicator, true, undefined, symbol().volumePrecision, savedCalcParams[indicator])
       if (paneId) {
         subIndicatorMap[indicator] = paneId
       }
@@ -537,6 +542,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
               delete (newIndicators as Record<string, string>)[data.indicatorName]
               setSubIndicators(newIndicators)
             }
+            store.removeIndicatorCalcParam(data.indicatorName)
             break
           }
         }
@@ -920,7 +926,9 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           setIndicatorSettingModalParams({ visible: false, indicatorName: '', paneId: '', calcParams: [], extendData: undefined })
         }}
         onIndicatorSettingConfirm={(params) => {
-          widget?.overrideIndicator({ name: indicatorSettingModalParams().indicatorName, calcParams: params }, indicatorSettingModalParams().paneId)
+          const indName = indicatorSettingModalParams().indicatorName
+          widget?.overrideIndicator({ name: indName, calcParams: params }, indicatorSettingModalParams().paneId)
+          store.setIndicatorCalcParam(indName, params)
         }}
         pineEditorVisible={pineEditorVisible()}
         pineEditorInitialCode={pineEditorInitialCode()}

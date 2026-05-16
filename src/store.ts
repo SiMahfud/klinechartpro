@@ -27,6 +27,7 @@ interface StoredPreferences {
   drawings?: Record<string, any[]>
   alerts?: AlertConfig[]
   customScripts?: Record<string, string>
+  indicatorCalcParams?: Record<string, any[]>
 }
 
 /**
@@ -101,6 +102,25 @@ export class ChartStore {
     this._set('subIndicators', indicators)
   }
 
+  // --- Indicator CalcParams (per indicator name) ---
+  getIndicatorCalcParams (): Record<string, any[]> {
+    return this._get<Record<string, any[]>>('indicatorCalcParams') ?? {}
+  }
+  setIndicatorCalcParam (indicatorName: string, calcParams: any[]): void {
+    const all = this.getIndicatorCalcParams()
+    all[indicatorName] = calcParams
+    this._set('indicatorCalcParams', all)
+  }
+  getIndicatorCalcParam (indicatorName: string): any[] | null {
+    const all = this.getIndicatorCalcParams()
+    return all[indicatorName] ?? null
+  }
+  removeIndicatorCalcParam (indicatorName: string): void {
+    const all = this.getIndicatorCalcParams()
+    delete all[indicatorName]
+    this._set('indicatorCalcParams', all)
+  }
+
   // --- Styles ---
   getStyles (): Record<string, any> | null { return this._get<Record<string, any>>('styles') }
   setStyles (styles: Record<string, any>): void { this._set('styles', styles) }
@@ -170,13 +190,14 @@ export class ChartStore {
       mainIndicators: this.getMainIndicators() ?? undefined,
       styles: this.getStyles() ?? undefined,
       alerts: this.getAlerts(),
-      customScripts: this.getCustomScripts()
+      customScripts: this.getCustomScripts(),
+      indicatorCalcParams: this.getIndicatorCalcParams()
     }
   }
 
   clear (): void {
     const keys = ['theme', 'locale', 'timezone', 'symbol', 'period',
-      'mainIndicators', 'subIndicators', 'styles', 'drawings', 'alerts', 'customScripts']
+      'mainIndicators', 'subIndicators', 'styles', 'drawings', 'alerts', 'customScripts', 'indicatorCalcParams']
     keys.forEach(key => this._remove(key))
   }
 }
