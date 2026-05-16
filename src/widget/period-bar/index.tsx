@@ -38,6 +38,7 @@ export interface PeriodBarProps {
   onSettingClick: () => void
   onScreenshotClick: () => void
   onReplayClick?: () => void
+  onStrategyClick?: () => void
 }
 
 const PeriodBar: Component<PeriodBarProps> = props => {
@@ -171,6 +172,14 @@ const PeriodBar: Component<PeriodBarProps> = props => {
           <line x1="2" y1="3" x2="2" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
         </svg>
         <span>{i18n('replay', props.locale)}</span>
+      </div>
+      <div
+        class='item tools'
+        onClick={() => props.onStrategyClick?.()}>
+        <svg viewBox="0 0 20 20">
+          <path d="M3,17 L7,7 L10,12 L13,5 L17,15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>{i18n('strategy', props.locale)}</span>
       </div>
       <div
         class='item tools'

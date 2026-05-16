@@ -14,6 +14,7 @@
 
 import { STORAGE_PREFIX } from './config'
 import { SymbolInfo, Period, AlertConfig } from './types'
+import type { StrategyConfig, BacktestResults } from './strategy/types'
 
 interface StoredPreferences {
   theme?: string
@@ -28,6 +29,7 @@ interface StoredPreferences {
   alerts?: AlertConfig[]
   customScripts?: Record<string, string>
   indicatorCalcParams?: Record<string, any[]>
+  strategies?: StrategyConfig[]
 }
 
 /**
@@ -179,6 +181,31 @@ export class ChartStore {
     this.setCustomScripts(scripts)
   }
 
+  // --- Strategies ---
+  getStrategies (): StrategyConfig[] {
+    return this._get<StrategyConfig[]>('strategies') ?? []
+  }
+  saveStrategy (strategy: StrategyConfig): void {
+    const strategies = this.getStrategies()
+    const idx = strategies.findIndex(s => s.id === strategy.id)
+    if (idx >= 0) {
+      strategies[idx] = strategy
+    } else {
+      strategies.push(strategy)
+    }
+    this._set('strategies', strategies)
+  }
+  removeStrategy (id: string): void {
+    const strategies = this.getStrategies().filter(s => s.id !== id)
+    this._set('strategies', strategies)
+  }
+  getLastBacktestResults (): BacktestResults | null {
+    return this._get<BacktestResults>('lastBacktestResults')
+  }
+  saveBacktestResults (results: BacktestResults): void {
+    this._set('lastBacktestResults', results)
+  }
+
   // --- Bulk ---
   getAll (): StoredPreferences {
     return {
@@ -197,7 +224,8 @@ export class ChartStore {
 
   clear (): void {
     const keys = ['theme', 'locale', 'timezone', 'symbol', 'period',
-      'mainIndicators', 'subIndicators', 'styles', 'drawings', 'alerts', 'customScripts', 'indicatorCalcParams']
+      'mainIndicators', 'subIndicators', 'styles', 'drawings', 'alerts', 'customScripts', 'indicatorCalcParams',
+      'strategies', 'lastBacktestResults']
     keys.forEach(key => this._remove(key))
   }
 }

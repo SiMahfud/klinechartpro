@@ -44,6 +44,9 @@ import { handleContextMenuAction } from './widget/context-menu/ContextMenuHandle
 import AlertModal, { evaluateAlerts } from './widget/alert-modal'
 import PerformancePanel from './widget/performance-panel'
 import TemplateModal from './widget/template-modal'
+import StrategyModal from './widget/strategy-modal'
+import StrategyResults from './widget/strategy-results'
+import StrategyLivePanel from './widget/strategy-live-panel'
 import { ComparisonManager } from './comparison'
 import { ChartTemplateManager } from './chart-template'
 import { KeyboardShortcutManager } from './keyboard-shortcuts'
@@ -56,6 +59,9 @@ import { createPinePlugin } from '@simahfud/pine-to-kline'
 import { customRegistry } from './registry'
 
 import { SymbolInfo, Period, ChartProOptions, ChartPro } from './types'
+import { StrategyEngine, collectIndicatorResults } from './strategy'
+import type { StrategyConfig, BacktestResults, Trade } from './strategy'
+import { compilePineStrategy, isStrategyScript } from '../pine-to-kline/src'
 
 export interface ChartProComponentProps extends Required<Omit<ChartProOptions, 'container' | 'onSettingsChange' | 'onDrawingsChange' | 'onLayoutClick' | 'chartType' | 'renkoBrickSize' | 'rangeBarSize'>> {
   ref: (chart: ChartPro) => void
@@ -159,6 +165,19 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
   const chartTemplateManager = new ChartTemplateManager(store)
   const [templateModalVisible, setTemplateModalVisible] = createSignal(false)
   const [templates, setTemplates] = createSignal<any[]>(chartTemplateManager.getTemplates())
+
+  // Strategy Engine
+  const [strategyModalVisible, setStrategyModalVisible] = createSignal(false)
+  const [strategyResultsVisible, setStrategyResultsVisible] = createSignal(false)
+  const [strategyResults, setStrategyResults] = createSignal<BacktestResults | null>(null)
+  const [forwardTestActive, setForwardTestActive] = createSignal(false)
+  const [forwardTestEngine, setForwardTestEngine] = createSignal<StrategyEngine | null>(null)
+  const [forwardTestConfig, setForwardTestConfig] = createSignal<StrategyConfig | null>(null)
+  const [forwardOpenPositions, setForwardOpenPositions] = createSignal<Trade[]>([])
+  const [forwardClosedCount, setForwardClosedCount] = createSignal(0)
+  const [forwardWinCount, setForwardWinCount] = createSignal(0)
+  const [forwardLossCount, setForwardLossCount] = createSignal(0)
+  const [forwardEquity, setForwardEquity] = createSignal(0)
 
   // Pine Script Integration
   const [pineEditorVisible, setPineEditorVisible] = createSignal(false)
@@ -276,6 +295,19 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       // Update data point count for performance panel
       if (performancePanelVisible()) {
         setDataPointCount(widget?.getDataList()?.length || 0)
+      }
+
+      // Forward test: process each new bar
+      if (forwardTestActive()) {
+        const engine = forwardTestEngine()
+        if (engine && widget) {
+          const dataList = widget.getDataList()
+          if (dataList && dataList.length > 0) {
+            const barIndex = dataList.length - 1
+            const indicators = collectIndicatorResults(collectChartIndicatorData(), barIndex)
+            engine.processTick(barIndex, data, indicators)
+          }
+        }
       }
     }
   })
@@ -817,7 +849,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     try {
       // Try to access chart's internal overlay store
       const chartInstance = widget as any
-      const overlayStore = chartInstance._chartStore?.()?.getOverlayStore?.() ?? chartInstance.getOverlayStore?.()
+      const overlayStore = chartInstance.getChartStore?.()?.getOverlayStore?.() ?? chartInstance._chartStore?.getOverlayStore?.() ?? chartInstance.getOverlayStore?.()
       if (overlayStore) {
         const overlays = overlayStore.getInstances?.() ?? []
         overlays.forEach((o: any) => {
@@ -866,6 +898,328 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       // Scroll to that index explicitly (centers it or brings it into view)
       widget.scrollToDataIndex(closestIdx, 300)
     }
+  }
+
+  // ──────────────────────────────────────────────
+  // Strategy Handlers
+  // ──────────────────────────────────────────────
+
+  /** Collect indicator result arrays from the chart for strategy evaluation */
+  const collectChartIndicatorData = (): Map<string, any[]> => {
+    const indicatorData = new Map<string, any[]>()
+    if (!widget) return indicatorData
+
+    const dataList = widget.getDataList()
+    if (!dataList || dataList.length === 0) return indicatorData
+
+    // Collect from all active indicators
+    const allIndicators = [...mainIndicators(), ...Object.keys(subIndicators())]
+
+    for (const indName of allIndicators) {
+      try {
+        // Try to get indicator data from chart's internal store
+        const chartInstance = widget as any
+        const chartStore = chartInstance.getChartStore?.() ?? chartInstance._chartStore
+        if (chartStore) {
+          const indicatorStore = chartStore.getIndicatorStore?.()
+          if (indicatorStore) {
+            const instances = indicatorStore.getInstances?.() ?? new Map()
+            // Search across all panes
+            for (const [_paneId, paneIndicators] of instances) {
+              for (const ind of paneIndicators) {
+                if (ind.name === indName && ind.result) {
+                  indicatorData.set(indName, ind.result)
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`[Strategy] Could not collect data for indicator ${indName}:`, e)
+      }
+    }
+
+    return indicatorData
+  }
+
+  const tradeOverlayIds: string[] = []
+
+  /** Render entry/exit markers on chart */
+  const renderTradeOverlays = (trades: Trade[]) => {
+    if (!widget) return
+    clearTradeOverlays()
+
+    for (const trade of trades) {
+      const dataList = widget.getDataList()
+      if (!dataList) continue
+
+      // Entry marker
+      if (trade.entryBar >= 0 && trade.entryBar < dataList.length) {
+        const entryBar = dataList[trade.entryBar]
+        const entryId = `strategy_entry_${trade.id}`
+        widget.createOverlay({
+          id: entryId,
+          name: 'simpleAnnotation',
+          extendData: trade.direction === 'long' ? '▲' : '▼',
+          points: [{ timestamp: entryBar.timestamp, value: trade.entryPrice }],
+          styles: {
+            point: {
+              color: trade.direction === 'long' ? '#00C076' : '#EF5350',
+              activeColor: trade.direction === 'long' ? '#00C076' : '#EF5350',
+              radius: 4,
+              activeRadius: 5
+            }
+          }
+        } as any)
+        tradeOverlayIds.push(entryId)
+      }
+
+      // Exit marker
+      if (trade.exitBar !== undefined && trade.exitBar >= 0 && trade.exitBar < (widget.getDataList()?.length ?? 0)) {
+        const exitBar = widget.getDataList()![trade.exitBar]
+        const exitId = `strategy_exit_${trade.id}`
+        const isWin = (trade.pnl ?? 0) >= 0
+        widget.createOverlay({
+          id: exitId,
+          name: 'simpleAnnotation',
+          extendData: '✕',
+          points: [{ timestamp: exitBar.timestamp, value: trade.exitPrice }],
+          styles: {
+            point: {
+              color: isWin ? '#00C076' : '#EF5350',
+              activeColor: isWin ? '#00C076' : '#EF5350',
+              radius: 3,
+              activeRadius: 4
+            }
+          }
+        } as any)
+        tradeOverlayIds.push(exitId)
+      }
+    }
+  }
+
+  const clearTradeOverlays = () => {
+    if (!widget) return
+    for (const id of tradeOverlayIds) {
+      try { widget.removeOverlay(id) } catch {}
+    }
+    tradeOverlayIds.length = 0
+  }
+
+  /** Run backtest on loaded data */
+  const handleRunBacktest = async (config: StrategyConfig) => {
+    if (!widget) return
+    console.log(`[Strategy] Running backtest: ${config.name} (mode: ${config.mode})`)
+
+    const dataList = widget.getDataList()
+    if (!dataList || dataList.length === 0) {
+      console.warn('[Strategy] No data loaded for backtest')
+      return
+    }
+
+    // ── Script Mode: PineScript Strategy ──
+    if (config.mode === 'script' && config.scriptCode) {
+      console.log('[Strategy] Compiling PineScript strategy...')
+      try {
+        const compileResult = await compilePineStrategy(config.scriptCode, dataList as any)
+        if (!compileResult.success) {
+          console.error('[Strategy] Pine compile error:', compileResult.errors)
+          return
+        }
+
+        console.log(`[Strategy] Pine compiled: ${compileResult.strategyActions.length} actions from "${compileResult.strategyProperties.title}"`)
+
+        // Convert strategy actions into trades using TradeSimulator
+        const engine = new StrategyEngine({
+          ...config,
+          mode: 'visual', // Use visual mode engine for trade simulation
+          name: compileResult.strategyProperties.title || config.name,
+          initialCapital: compileResult.strategyProperties.initialCapital || config.initialCapital,
+        })
+
+        // Process actions bar by bar
+        engine.reset()
+        const actionsByBar = new Map<number, typeof compileResult.strategyActions>()
+        for (const action of compileResult.strategyActions) {
+          const list = actionsByBar.get(action.barIndex) ?? []
+          list.push(action)
+          actionsByBar.set(action.barIndex, list)
+        }
+
+        // Simulate trades from pine actions
+        const simulator = (engine as any)._simulator
+        simulator.reset()
+        simulator.setDataList(dataList)
+
+        for (let i = 0; i < dataList.length; i++) {
+          const bar = dataList[i]
+          const actions = actionsByBar.get(i)
+          if (!actions) {
+            simulator.recordEquity(i, bar)
+            continue
+          }
+
+          // Update trailing stops
+          simulator.updateTrailingStops(bar)
+          simulator.checkStopLosses(bar, i)
+          simulator.checkTakeProfits(bar, i)
+
+          for (const action of actions) {
+            if (action.type === 'entry') {
+              simulator.openPosition(action.direction, bar, i)
+            } else if (action.type === 'close') {
+              const positions = simulator.getOpenPositions()
+                .filter((t: Trade) => t.direction === action.direction || action.id)
+              for (const pos of positions) {
+                simulator.closePosition(pos.id, bar, i, 'signal')
+              }
+            } else if (action.type === 'exit') {
+              const positions = simulator.getOpenPositions()
+              for (const pos of positions) {
+                simulator.closePosition(pos.id, bar, i, 'signal')
+              }
+            }
+          }
+
+          simulator.recordEquity(i, bar)
+        }
+
+        // Close remaining positions
+        if (dataList.length > 0) {
+          simulator.closeAll(dataList[dataList.length - 1], dataList.length - 1, 'end_of_data')
+        }
+
+        const { calculateMetrics } = await import('./strategy/metrics')
+        const trades = simulator.getClosedTrades()
+        const equityCurve = simulator.getEquityCurve()
+        const metrics = calculateMetrics(trades, config.initialCapital, equityCurve)
+
+        const results: BacktestResults = {
+          strategyName: compileResult.strategyProperties.title || config.name,
+          symbol: symbol().ticker,
+          period: period().text,
+          dateRange: {
+            from: dataList[0].timestamp,
+            to: dataList[dataList.length - 1].timestamp
+          },
+          config,
+          trades,
+          metrics,
+          equityCurve,
+          executionTime: 0
+        }
+
+        console.log(`[Strategy] Pine backtest complete: ${results.trades.length} trades`)
+        console.log(`[Strategy] Net P/L: ${results.metrics.netProfit.toFixed(2)}, Win Rate: ${(results.metrics.winRate * 100).toFixed(1)}%`)
+
+        setStrategyResults(results)
+        store.saveBacktestResults(results)
+        renderTradeOverlays(results.trades)
+        setStrategyResultsVisible(true)
+        return
+      } catch (e) {
+        console.error('[Strategy] Pine strategy error:', e)
+        // Fall through to visual mode
+      }
+    }
+
+    // ── Visual Mode: Rule-based ──
+    const indicatorData = collectChartIndicatorData()
+    const engine = new StrategyEngine(config)
+    const results = engine.runBacktest(
+      dataList, indicatorData,
+      symbol().ticker, period().text
+    )
+
+    console.log(`[Strategy] Backtest complete: ${results.trades.length} trades in ${results.executionTime.toFixed(0)}ms`)
+    console.log(`[Strategy] Net P/L: ${results.metrics.netProfit.toFixed(2)}, Win Rate: ${(results.metrics.winRate * 100).toFixed(1)}%`)
+
+    // Store results
+    setStrategyResults(results)
+    store.saveBacktestResults(results)
+
+    // Render overlays
+    renderTradeOverlays(results.trades)
+
+    // Show results panel
+    setStrategyResultsVisible(true)
+  }
+
+  /** Start forward test — hook into live data */
+  const handleStartForwardTest = (config: StrategyConfig) => {
+    if (!widget) return
+    console.log(`[Strategy] Starting forward test: ${config.name}`)
+
+    const dataList = widget.getDataList()
+    const engine = new StrategyEngine(config)
+    engine.initForwardTest(dataList ?? [])
+
+    // Set event callback for real-time updates
+    engine.setEventCallback((event) => {
+      console.log(`[Strategy FWD] Event: ${event.type} @ ${event.price.toFixed(2)}`)
+      // Update live panel signals
+      setForwardOpenPositions(engine.getOpenPositions())
+      const closed = engine.getClosedTrades()
+      setForwardClosedCount(closed.length)
+      setForwardWinCount(closed.filter(t => (t.pnl ?? 0) > 0).length)
+      setForwardLossCount(closed.filter(t => (t.pnl ?? 0) < 0).length)
+      setForwardEquity(engine.getCurrentEquity())
+    })
+
+    setForwardTestEngine(engine)
+    setForwardTestConfig(config)
+    setForwardTestActive(true)
+    setForwardEquity(config.initialCapital)
+  }
+
+  /** Stop forward test */
+  const handleStopForwardTest = () => {
+    const engine = forwardTestEngine()
+    if (engine && widget) {
+      const dataList = widget.getDataList()
+      if (dataList && dataList.length > 0) {
+        const results = engine.stopForwardTest(dataList[dataList.length - 1], dataList.length - 1)
+        results.symbol = symbol().ticker
+        results.period = period().text
+        setStrategyResults(results)
+        setStrategyResultsVisible(true)
+        renderTradeOverlays(results.trades)
+      }
+    }
+    setForwardTestActive(false)
+    setForwardTestEngine(null)
+    setForwardTestConfig(null)
+    console.log('[Strategy] Forward test stopped')
+  }
+
+  /** Export trades to CSV */
+  const handleExportCSV = () => {
+    const results = strategyResults()
+    if (!results || results.trades.length === 0) return
+
+    const headers = ['#', 'Direction', 'Entry Time', 'Entry Price', 'Exit Time', 'Exit Price', 'P&L', 'P&L %', 'Exit Reason', 'Spread Cost', 'Commission']
+    const rows = results.trades.map((t, i) => [
+      i + 1,
+      t.direction,
+      t.entryTime ? new Date(t.entryTime).toISOString() : '',
+      t.entryPrice.toFixed(5),
+      t.exitTime ? new Date(t.exitTime).toISOString() : '',
+      t.exitPrice?.toFixed(5) ?? '',
+      (t.pnl ?? 0).toFixed(2),
+      (t.pnlPercent ?? 0).toFixed(2),
+      t.exitReason ?? '',
+      t.costs.spread.toFixed(2),
+      t.costs.commission.toFixed(2)
+    ])
+
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${results.strategyName}_${results.symbol}_${results.period}_trades.csv`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -972,14 +1326,14 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
                 { key: 'edit_style', label: i18n('edit_style', props.locale), icon: '🎨' },
                 { key: 'lock', label: i18n((() => {
                     try {
-                      const overlayStore = (widget as any)?._chartStore?.()?.getOverlayStore?.()
+                      const overlayStore = (widget as any)?.getChartStore?.()?.getOverlayStore?.() ?? (widget as any)?._chartStore?.getOverlayStore?.()
                       const overlays = overlayStore?.getInstances?.() ?? []
                       const o = overlays.find((ov: any) => ov.id === contextMenuOverlayId())
                       return o?.lock ? 'unlock_drawing' : 'lock_drawing'
                     } catch { return 'lock_drawing' }
                   })(), props.locale), icon: (() => {
                     try {
-                      const overlayStore = (widget as any)?._chartStore?.()?.getOverlayStore?.()
+                      const overlayStore = (widget as any)?.getChartStore?.()?.getOverlayStore?.() ?? (widget as any)?._chartStore?.getOverlayStore?.()
                       const overlays = overlayStore?.getInstances?.() ?? []
                       const o = overlays.find((ov: any) => ov.id === contextMenuOverlayId())
                       return o?.lock ? '🔓' : '🔒'
@@ -1110,6 +1464,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           }
         }}
         onReplayClick={() => enterReplaySelection()}
+        onStrategyClick={() => setStrategyModalVisible(true)}
       />
       <div
         class="klinecharts-pro-content">
@@ -1293,6 +1648,74 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
           onCreateAlert={(alert) => setAlerts([...alerts(), alert])}
           onRemoveAlert={(id) => setAlerts(alerts().filter(a => a.id !== id))}
         />
+      </Show>
+
+      {/* Strategy Modal */}
+      <StrategyModal
+        locale={locale()}
+        visible={strategyModalVisible()}
+        savedStrategies={store.getStrategies()}
+        activeIndicators={[...mainIndicators(), ...Object.keys(subIndicators())]}
+        onClose={() => setStrategyModalVisible(false)}
+        onRunBacktest={handleRunBacktest}
+        onStartForwardTest={handleStartForwardTest}
+        onSaveStrategy={(cfg: StrategyConfig) => store.saveStrategy(cfg)}
+        onDeleteStrategy={(id: string) => store.removeStrategy(id)}
+      />
+
+      {/* Strategy Results Panel */}
+      <StrategyResults
+        locale={locale()}
+        visible={strategyResultsVisible()}
+        results={strategyResults()}
+        onClose={() => {
+          setStrategyResultsVisible(false)
+          // Clear trade overlays
+          clearTradeOverlays()
+        }}
+        onTradeClick={(trade: Trade) => {
+          if (trade.entryBar !== undefined && widget) {
+            widget.scrollToDataIndex(trade.entryBar, 300)
+          }
+        }}
+        onModify={() => {
+          setStrategyResultsVisible(false)
+          clearTradeOverlays()
+          setStrategyModalVisible(true)
+        }}
+        onExportCSV={handleExportCSV}
+      />
+
+      {/* Forward Test Live Panel */}
+      <StrategyLivePanel
+        locale={locale()}
+        visible={forwardTestActive()}
+        strategyName={forwardTestConfig()?.name ?? ''}
+        equity={forwardEquity()}
+        initialCapital={forwardTestConfig()?.initialCapital ?? 10000}
+        openPositions={forwardOpenPositions()}
+        closedTradeCount={forwardClosedCount()}
+        winCount={forwardWinCount()}
+        lossCount={forwardLossCount()}
+        onStop={handleStopForwardTest}
+        onViewResults={() => {
+          const engine = forwardTestEngine()
+          if (engine) {
+            const results = engine.getLiveResults()
+            results.symbol = symbol().ticker
+            results.period = period().text
+            setStrategyResults(results)
+            setStrategyResultsVisible(true)
+          }
+        }}
+      />
+
+      {/* Forward Test Badge */}
+      <Show when={forwardTestActive()}>
+        <span class="forward-test-badge">
+          <span class="live-dot" />
+          FWD TEST
+        </span>
       </Show>
     </>
   )

@@ -68,7 +68,6 @@
   "dependencies": {
     "@simahfud/pine-to-kline": "file:pine-to-kline",
     "lodash": "^4.17.21",
-    "pinets": "^0.9.15",
     "solid-js": "^1.6.11"
   },
   "peerDependencies": {
