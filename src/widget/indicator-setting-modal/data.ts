@@ -144,5 +144,11 @@ export default {
     { paramNameKey: 'cvd_show_ma', precision: 0, min: 0, default: 1 },
     { paramNameKey: 'cvd_show_divergence', precision: 0, min: 0, default: 1 },
     { paramNameKey: 'cvd_div_lookback', precision: 0, min: 2, default: 5 }
+  ],
+  ABSORPTION: [
+    { paramNameKey: 'absorption_vol_period', precision: 0, min: 1, default: 20 },
+    { paramNameKey: 'absorption_sensitivity', precision: 0, min: 1, default: 2 },
+    { paramNameKey: 'absorption_show_bubbles', precision: 0, min: 0, default: 1 },
+    { paramNameKey: 'absorption_show_bg', precision: 0, min: 0, default: 1 }
   ]
 }

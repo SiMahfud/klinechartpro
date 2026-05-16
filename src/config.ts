@@ -17,7 +17,7 @@
  * Single source of truth — update here to add/remove indicators everywhere.
  */
 export const MAIN_INDICATOR_NAMES: string[] = [
-  'MA', 'EMA', 'SMA', 'BOLL', 'SAR', 'BBI'
+  'MA', 'EMA', 'SMA', 'BOLL', 'SAR', 'BBI', 'ABSORPTION'
 ]
 
 export const SUB_INDICATOR_NAMES: string[] = [

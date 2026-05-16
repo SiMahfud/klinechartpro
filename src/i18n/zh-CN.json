@@ -43,6 +43,11 @@
   "cvd_show_ma": "显示均线 (1=是, 0=否)",
   "cvd_show_divergence": "显示背离 (1=是, 0=否)",
   "cvd_div_lookback": "背离回溯期",
+  "absorption": "Absorption（成交量吸收）",
+  "absorption_vol_period": "成交量MA周期",
+  "absorption_sensitivity": "灵敏度（1=高，3=低）",
+  "absorption_show_bubbles": "显示气泡（1=是，0=否）",
+  "absorption_show_bg": "显示背景（1=是，0=否）",
 
   "utc": "世界统一时间",
   "honolulu": "(UTC-10) 檀香山",

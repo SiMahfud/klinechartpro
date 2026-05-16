@@ -3,8 +3,11 @@
  * These extend the base klinecharts indicator set.
  */
 
-import cvd from './cvd'
+import { IndicatorTemplate } from 'klinecharts'
 
-const indicators = [cvd]
+import cvd from './cvd'
+import absorption from './absorption'
+
+const indicators: IndicatorTemplate[] = [cvd as IndicatorTemplate, absorption as IndicatorTemplate]
 
 export default indicators
