@@ -237,6 +237,7 @@ const absorption: IndicatorTemplate<AbsorptionResult> = {
       if (!data || !data.absorption) continue
 
       const kline = kLineDataList[i]
+      if (!kline) continue
       const x = xAxis.convertToPixel(i)
       const isBull = data.absorption === 'bull'
       const strength = data.strength ?? 0.5
@@ -245,6 +246,10 @@ const absorption: IndicatorTemplate<AbsorptionResult> = {
       const yLow = yAxis.convertToPixel(kline.low)
       const yOpen = yAxis.convertToPixel(kline.open)
       const yClose = yAxis.convertToPixel(kline.close)
+
+      // Guard: skip if any coordinate is non-finite (prevents canvas errors)
+      if (!isFinite(x) || !isFinite(yHigh) || !isFinite(yLow)) continue
+
       const candleCenter = (yHigh + yLow) / 2
       const candleHeight = Math.abs(yLow - yHigh)
 

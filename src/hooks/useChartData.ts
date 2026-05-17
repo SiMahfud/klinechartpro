@@ -233,6 +233,9 @@ export function useChartData(props: UseChartDataProps) {
         widget?.applyNewData(displayData, displayData.length > 0)
         
         props.datafeed.subscribe(s, p, data => {
+          // Skip live updates during bar replay mode
+          if ((window as any)._replayActive) return
+
           if (data.close > 0) {
             const currentCt = untrack(chartType)
             if (isTransformChartType(currentCt)) {

@@ -1,8 +1,9 @@
 import { createSignal, onCleanup } from 'solid-js'
 import { Chart, ActionType } from 'klinecharts'
 import { BarReplayManager } from '../../bar-replay'
+import type { SymbolInfo, Period, Datafeed } from '../../types'
 
-export function useReplayManager(getWidget: () => Chart | null, datafeed: any) {
+export function useReplayManager(getWidget: () => Chart | null, datafeed: Datafeed, symbol: () => SymbolInfo, period: () => Period) {
   const [replayActive, setReplayActive] = createSignal(false)
   const [replaySelecting, setReplaySelecting] = createSignal(false)
   const [replayCrosshairX, setReplayCrosshairX] = createSignal(0)
@@ -26,6 +27,11 @@ export function useReplayManager(getWidget: () => Chart | null, datafeed: any) {
   const startReplayFromIndex = (startIndex: number) => {
     const widget = getWidget()
     if (!widget) return
+
+    // Pause live datafeed to prevent price jumps during replay
+    datafeed.unsubscribe(symbol(), period())
+    ;(window as any)._replayActive = true
+
     replayManager = new BarReplayManager(widget, datafeed)
     replayManager.setHandlers({
       onStep: (index, total) => { setReplayIndex(index); setReplayTotal(total) },
@@ -90,6 +96,11 @@ export function useReplayManager(getWidget: () => Chart | null, datafeed: any) {
   const stopReplay = () => {
     replayManager?.stop()
     setReplayActive(false)
+
+    // Resume live datafeed after replay ends
+    ;(window as any)._replayActive = false
+    // Re-subscribe will happen automatically via useChartData effect
+    // when the original data is restored by BarReplayManager.stop()
   }
 
   onCleanup(() => {

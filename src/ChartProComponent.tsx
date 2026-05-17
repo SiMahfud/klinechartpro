@@ -57,6 +57,7 @@ import { useChartData, adjustFromTo } from './hooks/useChartData'
 import { translateTimezone } from './widget/timezone-modal/data'
 import { createPinePlugin } from '@simahfud/pine-to-kline'
 import { customRegistry } from './registry'
+import { MTFDataService } from './mtf-data-service'
 
 import { SymbolInfo, Period, ChartProOptions, ChartPro } from './types'
 import { StrategyEngine, collectIndicatorResults } from './strategy'
@@ -328,7 +329,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     cancelReplaySelection,
     startReplay,
     stopReplay
-  } = useReplayManager(() => widget, props.datafeed)
+  } = useReplayManager(() => widget, props.datafeed, symbol, period)
 
   // Object Tree
   const [objectTreeVisible, setObjectTreeVisible] = createSignal(false)
@@ -491,6 +492,11 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     // Store chart instance globally for overlays (e.g. FRVP) to access data
     ;(window as any)._klineChartInstance = widget
 
+    // Initialize MTF Data Service for multi-timeframe data access
+    const mtfService = new MTFDataService()
+    mtfService.setContext(symbol(), period(), props.datafeed)
+    ;(window as any)._mtfDataService = mtfService
+
     if (widget) {
       const watermarkContainer = widget.getDom('candle_pane', DomPosition.Main)
       if (watermarkContainer) {
@@ -642,6 +648,10 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     shortcutManager?.destroy()
     comparisonManager?.destroy()
     ;(window as any)._klineChartInstance = null
+    if ((window as any)._mtfDataService) {
+      ;(window as any)._mtfDataService.destroy()
+      ;(window as any)._mtfDataService = null
+    }
     dispose(widgetRef!)
   })
 
@@ -654,6 +664,16 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
       priceUnitDom.style.display = 'none'
     }
     widget?.setPriceVolumePrecision(s?.pricePrecision ?? 2, s?.volumePrecision ?? 0)
+  })
+
+  // Update MTF Data Service context when symbol or period changes
+  createEffect(() => {
+    const s = symbol()
+    const p = period()
+    const mtf = (window as any)._mtfDataService as MTFDataService | null
+    if (mtf) {
+      mtf.setContext(s, p, props.datafeed)
+    }
   })
 
   createEffect(() => {

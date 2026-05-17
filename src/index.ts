@@ -28,6 +28,7 @@ import { KeyboardShortcutManager } from './keyboard-shortcuts'
 import { ChartTemplateManager } from './chart-template'
 import { CrosshairSyncManager } from './crosshair-sync'
 import { BarReplayManager } from './bar-replay'
+import { MTFDataService } from './mtf-data-service'
 
 import { load } from './i18n'
 
@@ -164,6 +165,7 @@ export {
   ChartTemplateManager,
   CrosshairSyncManager,
   BarReplayManager,
+  MTFDataService,
   load as loadLocales
 }
 

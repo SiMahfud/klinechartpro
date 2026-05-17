@@ -369,4 +369,28 @@ export const BUILTIN_INDICATOR_FIELDS: IndicatorFieldInfo[] = [
       { key: 'lower', label: 'Lower', type: 'number' },
     ]
   },
+  {
+    indicatorName: 'MTFSR',
+    label: 'MTF S/R',
+    fields: [
+      { key: 'nearestSupport', label: 'Nearest Support', type: 'number' },
+      { key: 'nearestResistance', label: 'Nearest Resistance', type: 'number' },
+      { key: 'insideSupport', label: 'Inside Support Zone', type: 'boolean' },
+      { key: 'insideResistance', label: 'Inside Resistance Zone', type: 'boolean' },
+      { key: 'zoneCount', label: 'Total Zone Count', type: 'number' },
+    ]
+  },
+  {
+    indicatorName: 'PRICEACTION',
+    label: 'Price Action',
+    fields: [
+      { key: 'pattern', label: 'Pattern', type: 'string' },
+      { key: 'direction', label: 'Direction', type: 'string' },
+      { key: 'volSpikeDir', label: 'Vol Spike Direction', type: 'string' },
+      { key: 'wickRatio', label: 'Wick Ratio', type: 'number' },
+      { key: 'bodyPercent', label: 'Body %', type: 'number' },
+      { key: 'volumeSpike', label: 'Volume Spike', type: 'boolean' },
+      { key: 'strength', label: 'Strength', type: 'number' },
+    ]
+  },
 ]

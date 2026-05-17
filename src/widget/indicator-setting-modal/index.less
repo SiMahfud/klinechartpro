@@ -3,7 +3,35 @@
 .@{prefix-cls}-indicator-setting-modal-content {
   display: grid;
   grid-template-columns: auto auto;
-  grid-row-gap: 20px;
+  grid-row-gap: 16px;
+  grid-column-gap: 16px;
   margin-top: 20px;
   align-items: center;
+
+  .param-label {
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .param-label-toggle {
+    cursor: default;
+  }
+
+  .param-control {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .param-control-switch {
+    justify-content: flex-start;
+  }
+
+  .param-control-checkbox {
+    justify-content: flex-start;
+  }
+
+  .param-control-select {
+    justify-content: flex-start;
+  }
 }
