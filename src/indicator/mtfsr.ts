@@ -31,6 +31,8 @@ interface SRZone {
   isBroken: boolean
   isValid: boolean
   pivotIndex: number
+  pivotTimestamp: number    // when pivot was confirmed (for time-filtering)
+  brokenAtTimestamp: number // when zone was broken (-1 = not broken)
   recency?: number
   score?: number
   tfLabel: string
@@ -136,7 +138,7 @@ function detectPivotLows (data: KLineData[], strength: number, startIdx: number)
 function buildZone (pivot: Pivot, type: 'RESISTANCE' | 'SUPPORT', tfLabel: string, tfColor: string): SRZone {
   const top = type === 'RESISTANCE' ? pivot.wickTop : pivot.bodyClose
   const bottom = type === 'RESISTANCE' ? pivot.bodyClose : pivot.wickBottom
-  return { type, top, bottom, left: pivot.index, touchCount: 1, isValid: false, isBroken: false, pivotIndex: pivot.index, tfLabel, tfColor }
+  return { type, top, bottom, left: pivot.index, touchCount: 1, isValid: false, isBroken: false, pivotIndex: pivot.index, pivotTimestamp: 0, brokenAtTimestamp: -1, tfLabel, tfColor }
 }
 
 // ── Merge Overlapping Zones ──
@@ -171,23 +173,26 @@ function validateZones (zones: SRZone[], data: KLineData[], minTouch: number): S
   const lastIdx = data.length - 1
   for (const zone of zones) {
     let touches = 0
-    let broken = false
+    let brokenAtIdx = -1
     const zH = zone.top - zone.bottom
     const closeTol = zH * 0.3
 
     for (let i = zone.left + 1; i < data.length; i++) {
       const bar = data[i]
       if (zone.type === 'RESISTANCE') {
-        if (bar.high >= zone.bottom && bar.high <= zone.top && bar.close < zone.bottom + closeTol) touches++
-        if (bar.close > zone.top + zH * 0.5) broken = true
+        if (brokenAtIdx < 0 && bar.high >= zone.bottom && bar.high <= zone.top && bar.close < zone.bottom + closeTol) touches++
+        if (brokenAtIdx < 0 && bar.close > zone.top + zH * 0.5) brokenAtIdx = i
       } else {
-        if (bar.low <= zone.top && bar.low >= zone.bottom && bar.close > zone.top - closeTol) touches++
-        if (bar.close < zone.bottom - zH * 0.5) broken = true
+        if (brokenAtIdx < 0 && bar.low <= zone.top && bar.low >= zone.bottom && bar.close > zone.top - closeTol) touches++
+        if (brokenAtIdx < 0 && bar.close < zone.bottom - zH * 0.5) brokenAtIdx = i
       }
     }
     zone.touchCount = touches
-    zone.isBroken = broken
-    if (touches >= minTouch && !broken) {
+    zone.isBroken = brokenAtIdx >= 0
+    zone.brokenAtTimestamp = brokenAtIdx >= 0 ? data[brokenAtIdx].timestamp : -1
+    // Include all zones with enough touches (broken or not)
+    // Per-bar filtering handles broken status based on time
+    if (touches >= minTouch) {
       zone.isValid = true
       zone.recency = zone.pivotIndex / lastIdx
       zone.score = zone.touchCount * 0.6 + (zone.recency ?? 0) * 10 * 0.4
@@ -214,10 +219,10 @@ function filterNearest (zones: SRZone[], price: number, max: number): { resistan
 // ── Full Detection Pipeline ──
 
 function detectZonesOnData (
-  data: KLineData[], strength: number, minTouch: number, maxZones: number,
-  currentPrice: number, tfLabel: string, tfColor: string, lookback: number
-): { resistance: SRZone[], support: SRZone[] } {
-  if (data.length < strength * 2 + 1) return { resistance: [], support: [] }
+  data: KLineData[], strength: number, minTouch: number,
+  tfLabel: string, tfColor: string, lookback: number
+): SRZone[] {
+  if (data.length < strength * 2 + 1) return []
   const startIdx = Math.max(0, data.length - lookback)
   const pivotHighs = detectPivotHighs(data, strength, startIdx)
   const pivotLows = detectPivotLows(data, strength, startIdx)
@@ -227,12 +232,31 @@ function detectZonesOnData (
   const mergedS = mergeZones(rawS)
   const validR = validateZones(mergedR, data, minTouch)
   const validS = validateZones(mergedS, data, minTouch)
-  return filterNearest([...validR, ...validS], currentPrice, maxZones)
+  const allValid = [...validR, ...validS]
+  // Attach confirmation timestamps from aggregated data
+  for (const z of allValid) {
+    const confirmIdx = Math.min(z.pivotIndex + strength, data.length - 1)
+    z.pivotTimestamp = data[confirmIdx].timestamp
+  }
+  return allValid
+}
+
+/** Filter zones active at a given time, then find nearest to price */
+function getZonesAtTime (
+  allZones: SRZone[], timestamp: number, price: number, maxZones: number
+): { resistance: SRZone[], support: SRZone[] } {
+  const active = allZones.filter(z =>
+    z.pivotTimestamp <= timestamp &&
+    (z.brokenAtTimestamp < 0 || z.brokenAtTimestamp > timestamp)
+  )
+  return filterNearest(active, price, maxZones)
 }
 
 // ── Cache ──
 
 let _cachedResult: { resistance: SRZone[], support: SRZone[] } = { resistance: [], support: [] }
+let _cachedAllZones: SRZone[] = []
+let _cachedMaxZones = 5
 let _cacheLen = 0
 let _cacheKey = ''
 
@@ -250,6 +274,75 @@ function getPrecision (price: number): number {
   const s = price?.toString() || ''
   const d = s.split('.')[1] || ''
   return Math.min(5, Math.max(2, d.length))
+}
+
+// ── Per-Bar Result Builder (time-aware) ──
+
+function buildPerBarResults (dataList: KLineData[], allZones: SRZone[], maxZones: number): any[] {
+  return dataList.map((bar) => {
+    const price = bar.close
+    const ts = bar.timestamp
+
+    // Get zones that were active at this bar's time (no look-ahead)
+    const { resistance: barR, support: barS } = getZonesAtTime(allZones, ts, price, maxZones)
+
+    // Find nearest support zone
+    let nearestSupport: number | undefined
+    let supportZone: SRZone | undefined
+    for (const z of barS) {
+      if (z.top <= price || (price >= z.bottom && price <= z.top)) {
+        nearestSupport = z.top
+        supportZone = z
+        break
+      }
+    }
+
+    // Find nearest resistance zone
+    let nearestResistance: number | undefined
+    let resistanceZone: SRZone | undefined
+    for (const z of barR) {
+      if (z.bottom >= price || (price >= z.bottom && price <= z.top)) {
+        nearestResistance = z.bottom
+        resistanceZone = z
+        break
+      }
+    }
+
+    // Check if price is inside any zone
+    const insideSupport = barS.some(z => price >= z.bottom && price <= z.top) ? 1 : 0
+    const insideResistance = barR.some(z => price >= z.bottom && price <= z.top) ? 1 : 0
+    const zoneCount = barR.length + barS.length
+
+    // Zone edge data
+    const supportZoneBottom = supportZone?.bottom
+    const supportZoneTop = supportZone?.top
+    const resistanceZoneBottom = resistanceZone?.bottom
+    const resistanceZoneTop = resistanceZone?.top
+    const supportZoneWidth = supportZone ? supportZone.top - supportZone.bottom : undefined
+    const resistanceZoneWidth = resistanceZone ? resistanceZone.top - resistanceZone.bottom : undefined
+
+    // Penetration percentage
+    let supportPenetration: number | undefined
+    if (insideSupport && supportZone) {
+      const zw = supportZone.top - supportZone.bottom
+      supportPenetration = zw > 0 ? ((supportZone.top - price) / zw) * 100 : 0
+    }
+    let resistancePenetration: number | undefined
+    if (insideResistance && resistanceZone) {
+      const zw = resistanceZone.top - resistanceZone.bottom
+      resistancePenetration = zw > 0 ? ((price - resistanceZone.bottom) / zw) * 100 : 0
+    }
+
+    return {
+      signal: undefined,
+      nearestSupport, nearestResistance,
+      insideSupport, insideResistance, zoneCount,
+      supportPenetration, resistancePenetration,
+      supportZoneWidth, resistanceZoneWidth,
+      supportZoneBottom, supportZoneTop,
+      resistanceZoneBottom, resistanceZoneTop
+    }
+  })
 }
 
 // ── Indicator ──
@@ -272,7 +365,7 @@ const mtfsr: IndicatorTemplate = {
 
     const key = p.join(',')
     if (dataList.length === _cacheLen && key === _cacheKey) {
-      return dataList.map(() => ({ signal: undefined }))
+      return buildPerBarResults(dataList, _cachedAllZones, _cachedMaxZones)
     }
     _cacheLen = dataList.length
     _cacheKey = key
@@ -286,7 +379,7 @@ const mtfsr: IndicatorTemplate = {
     const chartPeriod = (window as any)?._mtfDataService?.getCurrentPeriod?.()
     const chartRank = chartPeriod ? getTFRank(chartPeriod.timespan, chartPeriod.multiplier) : 0
 
-    const allR: SRZone[] = [], allS: SRZone[] = []
+    const allZones: SRZone[] = []
 
     for (const tf of TF_CONFIGS) {
       if ((p[tf.paramIndex] as number) !== 1) continue
@@ -309,46 +402,21 @@ const mtfsr: IndicatorTemplate = {
       // Use higher pivot strength for higher TFs
       const htfStrength = Math.max(strength, Math.ceil(strength * (1 + (tfRank - chartRank) * 0.15)))
       const htfMinTouch = Math.max(1, minTouch - 1)
-      const zones = detectZonesOnData(tfData, htfStrength, htfMinTouch, Math.min(maxZones, 3), currentPrice, tf.label, tf.color, lookback)
-      allR.push(...zones.resistance)
-      allS.push(...zones.support)
+      const zones = detectZonesOnData(tfData, htfStrength, htfMinTouch, tf.label, tf.color, lookback)
+      allZones.push(...zones)
     }
 
-    _cachedResult = { resistance: allR, support: allS }
+    // Store in cache
+    _cachedAllZones = allZones
+    _cachedMaxZones = maxZones
 
-    // Build per-bar results for strategy builder compatibility
-    return dataList.map((bar) => {
-      const price = bar.close
-      // Find nearest support (closest zone below or containing price)
-      let nearestSupport: number | undefined
-      for (const z of allS) {
-        if (z.top <= price || (price >= z.bottom && price <= z.top)) {
-          nearestSupport = z.top
-          break
-        }
-      }
-      // Find nearest resistance (closest zone above or containing price)
-      let nearestResistance: number | undefined
-      for (const z of allR) {
-        if (z.bottom >= price || (price >= z.bottom && price <= z.top)) {
-          nearestResistance = z.bottom
-          break
-        }
-      }
-      // Check if price is inside any zone
-      const insideSupport = allS.some(z => price >= z.bottom && price <= z.top) ? 1 : 0
-      const insideResistance = allR.some(z => price >= z.bottom && price <= z.top) ? 1 : 0
-      const zoneCount = allR.length + allS.length
+    // For drawing: filter zones active at last bar's time
+    const lastBar = dataList[dataList.length - 1]
+    const { resistance: drawR, support: drawS } = getZonesAtTime(allZones, lastBar.timestamp, currentPrice, maxZones)
+    _cachedResult = { resistance: drawR, support: drawS }
 
-      return {
-        signal: undefined,
-        nearestSupport,
-        nearestResistance,
-        insideSupport,
-        insideResistance,
-        zoneCount
-      }
-    })
+    // Build per-bar results — time-aware (no look-ahead bias for backtesting)
+    return buildPerBarResults(dataList, allZones, maxZones)
   },
 
   draw: ({ ctx, bounding, yAxis, xAxis, indicator }: any) => {

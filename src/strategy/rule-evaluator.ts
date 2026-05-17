@@ -63,7 +63,8 @@ export function evaluateCondition (
     currentValue,
     prevValue,
     targetValue,
-    condition.compareWith.stringValue
+    condition.compareWith.stringValue,
+    condition.compareWith.value2
   )
 }
 
@@ -127,7 +128,8 @@ function evaluateOperator (
   currentValue: any,
   prevValue: any,
   targetValue: any,
-  stringTarget?: string
+  stringTarget?: string,
+  upperBound?: number
 ): boolean {
   // Handle undefined values
   if (currentValue === undefined || currentValue === null) {
@@ -192,6 +194,14 @@ function evaluateOperator (
              currentValue === '' ||
              currentValue === undefined ||
              currentValue === null
+
+    case 'between': {
+      // Check if value is between compareWith.value (lower) and compareWith.value2 (upper)
+      const v = toNumber(currentValue)
+      const lower = toNumber(targetValue)
+      const upper = upperBound !== undefined ? upperBound : lower
+      return v >= lower && v <= upper
+    }
 
     default:
       return false

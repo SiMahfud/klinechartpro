@@ -207,7 +207,7 @@ export class StrategyEngine {
           indicators, this._prevIndicators
         )
         if (shouldEnter) {
-          const trade = this._simulator.openPosition('long', bar, barIndex)
+          const trade = this._simulator.openPosition('long', bar, barIndex, indicators)
           if (trade) {
             events.push(this.createEvent('entry_long', barIndex, bar.close, bar.timestamp, trade))
           }
@@ -221,7 +221,7 @@ export class StrategyEngine {
           indicators, this._prevIndicators
         )
         if (shouldEnter) {
-          const trade = this._simulator.openPosition('short', bar, barIndex)
+          const trade = this._simulator.openPosition('short', bar, barIndex, indicators)
           if (trade) {
             events.push(this.createEvent('entry_short', barIndex, bar.close, bar.timestamp, trade))
           }

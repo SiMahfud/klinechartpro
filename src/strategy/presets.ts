@@ -270,7 +270,127 @@ export const VOLUME_SPIKE_SCALPER: StrategyConfig = {
 // Export all presets
 // ────────────────────────────────────────────────
 
+// ────────────────────────────────────────────────
+// 6. SR Zone Reversal — Percentage-Based (Long + Short)
+// ────────────────────────────────────────────────
+
+export const SR_ZONE_REVERSAL: StrategyConfig = {
+  id: 'preset_sr_zone_reversal',
+  name: 'SR Zone Reversal (% Based)',
+  description: 'Enter when price penetrates ≥30% into HTF SR zone with rejection candle (pin bar/engulfing). SL placed 20% outside zone edge. RR 1:1.',
+  mode: 'visual',
+  initialCapital: 10000,
+  currency: 'USD',
+  lotSize: 0.1,
+  maxOpenTrades: 1,
+  costs: { includeSpread: true, spreadPips: 1.5, includeCommission: true, commissionPerLot: 7, pipValue: 10 },
+
+  longEntry: {
+    logic: 'AND',
+    conditions: [
+      // Price must be inside support zone
+      { id: uid(), source: 'MTFSR', field: 'insideSupport', operator: 'is_true', compareWith: { type: 'value', value: 1 } },
+      // Price has penetrated ≥30% into the zone
+      { id: uid(), source: 'MTFSR', field: 'supportPenetration', operator: 'greater_equal', compareWith: { type: 'value', value: 30 } },
+      // Bullish rejection pattern (pin bar or engulfing)
+      { id: uid(), source: 'PRICEACTION', field: 'direction', operator: 'equals', compareWith: { type: 'value', stringValue: 'bull' } }
+    ]
+  },
+  shortEntry: {
+    logic: 'AND',
+    conditions: [
+      // Price must be inside resistance zone
+      { id: uid(), source: 'MTFSR', field: 'insideResistance', operator: 'is_true', compareWith: { type: 'value', value: 1 } },
+      // Price has penetrated ≥30% into the zone
+      { id: uid(), source: 'MTFSR', field: 'resistancePenetration', operator: 'greater_equal', compareWith: { type: 'value', value: 30 } },
+      // Bearish rejection pattern
+      { id: uid(), source: 'PRICEACTION', field: 'direction', operator: 'equals', compareWith: { type: 'value', stringValue: 'bear' } }
+    ]
+  },
+  longExit: {
+    logic: 'OR',
+    conditions: [
+      // Exit when price enters resistance zone (target area)
+      { id: uid(), source: 'MTFSR', field: 'insideResistance', operator: 'is_true', compareWith: { type: 'value', value: 1 } }
+    ]
+  },
+  shortExit: {
+    logic: 'OR',
+    conditions: [
+      // Exit when price enters support zone (target area)
+      { id: uid(), source: 'MTFSR', field: 'insideSupport', operator: 'is_true', compareWith: { type: 'value', value: 1 } }
+    ]
+  },
+
+  stopLoss: { type: 'sr_zone_percent', value: 20 },  // SL 20% outside zone edge
+  takeProfit: { type: 'rr_ratio', value: 1.0 },       // RR 1:1
+  trailingStop: { enabled: false, activationPips: 20, trailPips: 10 }
+}
+
+// ────────────────────────────────────────────────
+// 7. SR Zone Breakout Retest — Percentage-Based
+// ────────────────────────────────────────────────
+
+export const SR_ZONE_BREAKOUT_RETEST: StrategyConfig = {
+  id: 'preset_sr_zone_breakout_retest',
+  name: 'SR Zone Breakout Retest (% Based)',
+  description: 'After breakout, wait for retest (shallow penetration ≤40% back into zone) with rejection candle. SL 20% outside zone. RR 1:1.',
+  mode: 'visual',
+  initialCapital: 10000,
+  currency: 'USD',
+  lotSize: 0.1,
+  maxOpenTrades: 1,
+  costs: { includeSpread: true, spreadPips: 1.5, includeCommission: true, commissionPerLot: 7, pipValue: 10 },
+
+  longEntry: {
+    logic: 'AND',
+    conditions: [
+      // Price is retesting resistance zone from above (wick into zone)
+      { id: uid(), source: 'MTFSR', field: 'insideResistance', operator: 'is_true', compareWith: { type: 'value', value: 1 } },
+      // Shallow retest: only penetrated ≤40% (not deep — just a retest)
+      { id: uid(), source: 'MTFSR', field: 'resistancePenetration', operator: 'less_equal', compareWith: { type: 'value', value: 40 } },
+      // Bullish rejection = price bouncing back up from retest
+      { id: uid(), source: 'PRICEACTION', field: 'direction', operator: 'equals', compareWith: { type: 'value', stringValue: 'bull' } },
+      // Close must be above zone top (confirms breakout held)
+      { id: uid(), source: 'price', field: 'close', operator: 'greater_than', compareWith: { type: 'indicator', source: 'MTFSR', field: 'resistanceZoneTop' } }
+    ]
+  },
+  shortEntry: {
+    logic: 'AND',
+    conditions: [
+      // Price is retesting support zone from below (wick into zone)
+      { id: uid(), source: 'MTFSR', field: 'insideSupport', operator: 'is_true', compareWith: { type: 'value', value: 1 } },
+      // Shallow retest
+      { id: uid(), source: 'MTFSR', field: 'supportPenetration', operator: 'less_equal', compareWith: { type: 'value', value: 40 } },
+      // Bearish rejection = price dropping back down from retest
+      { id: uid(), source: 'PRICEACTION', field: 'direction', operator: 'equals', compareWith: { type: 'value', stringValue: 'bear' } },
+      // Close must be below zone bottom (confirms breakdown held)
+      { id: uid(), source: 'price', field: 'close', operator: 'less_than', compareWith: { type: 'indicator', source: 'MTFSR', field: 'supportZoneBottom' } }
+    ]
+  },
+  longExit: {
+    logic: 'OR',
+    conditions: [
+      { id: uid(), source: 'PRICEACTION', field: 'direction', operator: 'equals', compareWith: { type: 'value', stringValue: 'bear' } }
+    ]
+  },
+  shortExit: {
+    logic: 'OR',
+    conditions: [
+      { id: uid(), source: 'PRICEACTION', field: 'direction', operator: 'equals', compareWith: { type: 'value', stringValue: 'bull' } }
+    ]
+  },
+
+  stopLoss: { type: 'sr_zone_percent', value: 20 },  // SL 20% outside zone edge
+  takeProfit: { type: 'rr_ratio', value: 1.0 },       // RR 1:1
+  trailingStop: { enabled: false, activationPips: 20, trailPips: 10 }
+}
+
+// ────────────────────────────────────────────────
+
 export const STRATEGY_PRESETS: StrategyConfig[] = [
+  SR_ZONE_REVERSAL,
+  SR_ZONE_BREAKOUT_RETEST,
   SR_BOUNCE_BOTH,
   SR_BOUNCE_LONG,
   SR_BOUNCE_SHORT,

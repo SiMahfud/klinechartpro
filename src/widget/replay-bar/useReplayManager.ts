@@ -33,10 +33,37 @@ export function useReplayManager(getWidget: () => Chart | null, datafeed: Datafe
     ;(window as any)._replayActive = true
 
     replayManager = new BarReplayManager(widget, datafeed)
+
+    // Check for pending strategy replay
+    const pendingStrategy = (window as any)._pendingReplayStrategy
+    const hasStrategy = !!pendingStrategy
+    if (pendingStrategy) {
+      ;(window as any)._pendingReplayStrategy = null
+    }
+
     replayManager.setHandlers({
-      onStep: (index, total) => { setReplayIndex(index); setReplayTotal(total) },
+      onStep: (index, total, bar) => {
+        setReplayIndex(index); setReplayTotal(total)
+        // Process strategy on each step if active
+        if (hasStrategy && bar) {
+          try {
+            const processReplay = (window as any)._processReplayStrategy
+            if (processReplay) processReplay(index, bar)
+          } catch (e) {
+            console.warn('[Strategy Replay] Error processing bar:', e)
+          }
+        }
+      },
       onStatusChange: (status) => setReplayStatus(status),
-      onEnd: () => setReplayStatus('ended')
+      onEnd: () => {
+        setReplayStatus('ended')
+        // Clean up strategy state when replay ends
+        if (hasStrategy) {
+          ;(window as any)._activeReplayStrategy = null
+          ;(window as any)._replayStrategyEngine = null
+          ;(window as any)._processReplayStrategy = null
+        }
+      }
     })
     replayManager.start({ dataSource: 'current', speed: replaySpeed(), startFrom: startIndex }).then(() => {
       setReplayActive(true)

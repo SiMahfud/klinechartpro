@@ -25,6 +25,19 @@ function formatPnL (value: number): string {
   return `${prefix}${value.toFixed(2)}`
 }
 
+function detectPrecision (price: number): number {
+  if (price === 0) return 2
+  if (price >= 10000) return 1
+  if (price >= 100) return 2
+  if (price >= 10) return 3
+  if (price >= 1) return 4
+  return 5
+}
+
+function formatPrice (price: number): string {
+  return price.toFixed(detectPrecision(price))
+}
+
 const StrategyLivePanel: Component<StrategyLivePanelProps> = props => {
   const unrealizedPnL = () => {
     // This is a simplified display — actual unrealized P&L is tracked by the engine
@@ -58,7 +71,7 @@ const StrategyLivePanel: Component<StrategyLivePanelProps> = props => {
                 <div class="live-panel-row">
                   <span class="live-panel-label">Open</span>
                   <span style={{ color: pos.direction === 'long' ? '#00C076' : '#EF5350' }}>
-                    {pos.direction === 'long' ? '▲' : '▼'} {pos.direction} @ {pos.entryPrice.toFixed(2)}
+                    {pos.direction === 'long' ? '▲' : '▼'} {pos.direction} @ {formatPrice(pos.entryPrice)}
                   </span>
                 </div>
               )}

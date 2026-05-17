@@ -23,11 +23,14 @@ export type ConditionOperator =
   | 'crosses_below'
   | 'is_true'        // for boolean-like fields (divergence, absorption)
   | 'is_false'
+  | 'between'        // value is between compareWith.value and compareWith.value2
 
 export interface CompareTarget {
   type: 'value' | 'indicator' | 'price_field'
   /** Static numeric value (when type='value') */
   value?: number
+  /** Second value for 'between' operator (upper bound) */
+  value2?: number
   /** String value for enum comparisons like 'bull'/'bear' */
   stringValue?: string
   /** Indicator name (when type='indicator') */
@@ -57,7 +60,7 @@ export interface RuleGroup {
 // Stop Loss / Take Profit / Trailing
 // ──────────────────────────────────────────────
 
-export type StopLossType = 'fixed_pips' | 'atr_multiple' | 'percent' | 'none'
+export type StopLossType = 'fixed_pips' | 'atr_multiple' | 'percent' | 'sr_zone_percent' | 'none'
 export type TakeProfitType = 'fixed_pips' | 'rr_ratio' | 'atr_multiple' | 'percent' | 'none'
 
 export interface StopLossConfig {
@@ -378,6 +381,14 @@ export const BUILTIN_INDICATOR_FIELDS: IndicatorFieldInfo[] = [
       { key: 'insideSupport', label: 'Inside Support Zone', type: 'boolean' },
       { key: 'insideResistance', label: 'Inside Resistance Zone', type: 'boolean' },
       { key: 'zoneCount', label: 'Total Zone Count', type: 'number' },
+      { key: 'supportPenetration', label: 'Support Penetration %', type: 'number' },
+      { key: 'resistancePenetration', label: 'Resistance Penetration %', type: 'number' },
+      { key: 'supportZoneWidth', label: 'Support Zone Width', type: 'number' },
+      { key: 'resistanceZoneWidth', label: 'Resistance Zone Width', type: 'number' },
+      { key: 'supportZoneBottom', label: 'Support Zone Bottom', type: 'number' },
+      { key: 'supportZoneTop', label: 'Support Zone Top', type: 'number' },
+      { key: 'resistanceZoneBottom', label: 'Resistance Zone Bottom', type: 'number' },
+      { key: 'resistanceZoneTop', label: 'Resistance Zone Top', type: 'number' },
     ]
   },
   {

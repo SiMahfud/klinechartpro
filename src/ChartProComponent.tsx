@@ -17,7 +17,7 @@ import { createSignal, createEffect, onMount, Show, onCleanup, startTransition, 
 import {
   init, dispose, utils, Nullable, Chart, OverlayMode, Styles,
   TooltipIconPosition, ActionType, PaneOptions, Indicator, DomPosition, FormatDateType,
-  registerIndicator
+  registerIndicator, KLineData
 } from 'klinecharts'
 
 // @ts-ignore
@@ -1209,6 +1209,97 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     console.log('[Strategy] Forward test stopped')
   }
 
+  /** Start strategy replay — bar replay + strategy engine combined */
+  const handleStartReplay = (config: StrategyConfig) => {
+    if (!widget) return
+    console.log(`[Strategy] Starting replay: ${config.name}`)
+
+    // Register the process function for the replay hook to call
+    ;(window as any)._processReplayStrategy = processReplayStrategy
+
+    // Store strategy config for both useReplayManager detection and lazy engine init
+    ;(window as any)._pendingReplayStrategy = config
+    ;(window as any)._activeReplayStrategy = config
+    ;(window as any)._replayStrategyEngine = null  // reset previous engine
+
+    // Clear any previous trade overlays
+    clearTradeOverlays()
+
+    // Enter replay selection mode (user clicks a candle to start from)
+    enterReplaySelection()
+  }
+
+  /** Process strategy on replay step */
+  const processReplayStrategy = (barIndex: number, bar: KLineData) => {
+    if (!widget) return
+
+    // Lazy init: create engine on first bar
+    let engine = (window as any)._replayStrategyEngine as StrategyEngine | null
+    if (!engine) {
+      const config = (window as any)._activeReplayStrategy as StrategyConfig | null
+      if (!config) return
+      engine = new StrategyEngine(config)
+      engine.reset()
+      ;(window as any)._replayStrategyEngine = engine
+    }
+
+    const dataList = widget.getDataList()
+    if (!dataList || dataList.length === 0) return
+
+    // Collect indicator data for this bar
+    const indicators = collectChartIndicatorData()
+    const barIndicators = new Map<string, any>()
+    for (const [name, arr] of indicators) {
+      if (barIndex < arr.length) {
+        barIndicators.set(name, arr[barIndex])
+      }
+    }
+
+    // Process the bar through the strategy engine
+    const events = engine.processTick(barIndex, bar, barIndicators)
+
+    // Render trade markers for any new events
+    for (const event of events) {
+      if (event.type === 'entry_long' || event.type === 'entry_short') {
+        const entryId = `replay_entry_${event.trade?.id ?? barIndex}`
+        widget.createOverlay({
+          id: entryId,
+          name: 'simpleAnnotation',
+          extendData: event.type === 'entry_long' ? '▲' : '▼',
+          points: [{ timestamp: bar.timestamp, value: event.price }],
+          styles: {
+            point: {
+              color: event.type === 'entry_long' ? '#00C076' : '#EF5350',
+              activeColor: event.type === 'entry_long' ? '#00C076' : '#EF5350',
+              radius: 4, activeRadius: 5
+            }
+          }
+        } as any)
+        tradeOverlayIds.push(entryId)
+      }
+
+      if (event.type === 'exit_long' || event.type === 'exit_short' ||
+          event.type === 'stop_loss' || event.type === 'take_profit') {
+        const exitId = `replay_exit_${event.trade?.id ?? barIndex}`
+        const isWin = (event.trade?.pnl ?? 0) >= 0
+        widget.createOverlay({
+          id: exitId,
+          name: 'simpleAnnotation',
+          extendData: '✕',
+          points: [{ timestamp: bar.timestamp, value: event.price }],
+          styles: {
+            point: {
+              color: isWin ? '#00C076' : '#EF5350',
+              activeColor: isWin ? '#00C076' : '#EF5350',
+              radius: 3, activeRadius: 4
+            }
+          }
+        } as any)
+        tradeOverlayIds.push(exitId)
+      }
+    }
+  }
+
   /** Export trades to CSV */
   const handleExportCSV = () => {
     const results = strategyResults()
@@ -1676,6 +1767,7 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
         onClose={() => setStrategyModalVisible(false)}
         onRunBacktest={handleRunBacktest}
         onStartForwardTest={handleStartForwardTest}
+        onStartReplay={handleStartReplay}
         onSaveStrategy={(cfg: StrategyConfig) => store.saveStrategy(cfg)}
         onDeleteStrategy={(id: string) => store.removeStrategy(id)}
       />

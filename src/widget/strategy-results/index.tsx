@@ -4,7 +4,7 @@
  * Slide-in panel showing metrics, equity curve, and trade log.
  */
 
-import { Component, Show, For, onMount, createEffect } from 'solid-js'
+import { Component, Show, For, onMount, createEffect, createMemo } from 'solid-js'
 import type { BacktestResults, Trade } from '../../strategy/types'
 import i18n from '../../i18n'
 
@@ -28,6 +28,21 @@ function formatPnL (value: number): string {
 function formatPercent (value: number): string {
   const prefix = value >= 0 ? '+' : ''
   return `${prefix}${value.toFixed(2)}%`
+}
+
+/** Auto-detect price decimal precision from the price itself */
+function detectPrecision (price: number): number {
+  if (price === 0) return 2
+  if (price >= 10000) return 1     // JPY pairs, BTC
+  if (price >= 100) return 2       // Gold (XAUUSD), indices
+  if (price >= 10) return 3        // Silver (XAGUSD)
+  if (price >= 1) return 4         // Major FX pairs like EUR/USD at ~1.08
+  return 5                         // Sub-1 prices (some crypto, exotic)
+}
+
+function formatPrice (price: number, precision?: number): string {
+  const p = precision ?? detectPrecision(price)
+  return price.toFixed(p)
 }
 
 function formatDuration (ms: number): string {
@@ -131,6 +146,13 @@ const StrategyResults: Component<StrategyResultsProps> = props => {
     if (props.visible && props.results) {
       setTimeout(drawEquityCurve, 50)
     }
+  })
+
+  // Detect price precision from first trade entry price
+  const pricePrecision = createMemo(() => {
+    const trades = props.results?.trades ?? []
+    if (trades.length > 0) return detectPrecision(trades[0].entryPrice)
+    return 2
   })
 
   return (
@@ -252,8 +274,8 @@ const StrategyResults: Component<StrategyResultsProps> = props => {
                           {trade.direction === 'long' ? '▲ Long' : '▼ Short'}
                         </span>
                       </td>
-                      <td>{trade.entryPrice.toFixed(2)}</td>
-                      <td>{trade.exitPrice?.toFixed(2) ?? '—'}</td>
+                      <td>{formatPrice(trade.entryPrice, pricePrecision())}</td>
+                      <td>{trade.exitPrice != null ? formatPrice(trade.exitPrice, pricePrecision()) : '—'}</td>
                       <td>
                         <span class={`trade-pnl ${(trade.pnl ?? 0) >= 0 ? 'win' : 'loss'}`}>
                           {formatPnL(trade.pnl ?? 0)}

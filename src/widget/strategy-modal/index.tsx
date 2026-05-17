@@ -25,6 +25,7 @@ export interface StrategyModalProps {
   onClose: () => void
   onRunBacktest: (config: StrategyConfig) => void
   onStartForwardTest: (config: StrategyConfig) => void
+  onStartReplay: (config: StrategyConfig) => void
   onSaveStrategy: (config: StrategyConfig) => void
   onDeleteStrategy: (id: string) => void
 }
@@ -128,7 +129,7 @@ plot(signalLine, "Signal", color=color.orange)
 const StrategyModal: Component<StrategyModalProps> = props => {
   const [config, setConfig] = createSignal<StrategyConfig>(createDefaultConfig())
   const [activeTab, setActiveTab] = createSignal<'rules' | 'script' | 'settings' | 'manage'>('rules')
-  const [testMode, setTestMode] = createSignal<'backtest' | 'forward'>('backtest')
+  const [testMode, setTestMode] = createSignal<'backtest' | 'forward' | 'replay'>('backtest')
   const [scriptCode, setScriptCode] = createSignal<string>(DEFAULT_PINE_SCRIPT)
   const [scriptError, setScriptError] = createSignal<string>('')
   const [scriptCompiling, setScriptCompiling] = createSignal(false)
@@ -241,6 +242,8 @@ const StrategyModal: Component<StrategyModalProps> = props => {
   const handleRun = () => {
     if (testMode() === 'backtest') {
       props.onRunBacktest(config())
+    } else if (testMode() === 'replay') {
+      props.onStartReplay(config())
     } else {
       props.onStartForwardTest(config())
     }
@@ -373,6 +376,7 @@ const StrategyModal: Component<StrategyModalProps> = props => {
                   <option value="fixed_pips">Fixed Pips</option>
                   <option value="atr_multiple">ATR Multiple</option>
                   <option value="percent">Percent</option>
+                  <option value="sr_zone_percent">SR Zone %</option>
                 </select>
                 <Show when={config().stopLoss.type !== 'none'}>
                   <input
@@ -720,6 +724,16 @@ const StrategyModal: Component<StrategyModalProps> = props => {
               />
               {i18n('forward_test', props.locale) || 'Forward Test'}
             </label>
+            <label class={`test-mode-option ${testMode() === 'replay' ? 'active' : ''}`}>
+              <input
+                type="radio"
+                name="testMode"
+                value="replay"
+                checked={testMode() === 'replay'}
+                onChange={() => setTestMode('replay')}
+              />
+              {i18n('replay', props.locale) || '▶ Replay'}
+            </label>
           </div>
           <div class="strategy-action-buttons">
             <button class="strategy-btn secondary" onClick={handleSave}>
@@ -728,7 +742,9 @@ const StrategyModal: Component<StrategyModalProps> = props => {
             <button class="strategy-btn primary" onClick={handleRun}>
               {testMode() === 'backtest'
                 ? `▶ ${i18n('run_backtest', props.locale) || 'Run Backtest'}`
-                : `▶ ${i18n('start_forward_test', props.locale) || 'Start Forward Test'}`
+                : testMode() === 'replay'
+                  ? `▶ ${i18n('start_replay', props.locale) || 'Start Replay'}`
+                  : `▶ ${i18n('start_forward_test', props.locale) || 'Start Forward Test'}`
               }
             </button>
           </div>

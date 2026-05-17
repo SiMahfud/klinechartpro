@@ -72,7 +72,8 @@ export class TradeSimulator {
   openPosition (
     direction: TradeDirection,
     bar: KLineData,
-    barIndex: number
+    barIndex: number,
+    indicators?: Map<string, any>
   ): Trade | null {
     // Check max open trades
     if (this._openPositions.length >= this._config.maxOpenTrades) {
@@ -118,7 +119,31 @@ export class TradeSimulator {
     this._openPositions.push(trade)
     // Deduct entry costs from equity
     this._equity -= trade.costs.total
-    
+
+    // SR Zone Percent SL override: place SL at X% outside zone edge
+    if (this._config.stopLoss.type === 'sr_zone_percent' && indicators) {
+      const mtfsr = indicators.get('MTFSR')
+      const pct = this._config.stopLoss.value / 100  // e.g. 20 → 0.20
+
+      if (direction === 'long' && mtfsr?.supportZoneBottom != null && mtfsr?.supportZoneWidth != null) {
+        // SL below support zone bottom by pct of zone width
+        trade.stopLossPrice = mtfsr.supportZoneBottom - (mtfsr.supportZoneWidth * pct)
+      } else if (direction === 'short' && mtfsr?.resistanceZoneTop != null && mtfsr?.resistanceZoneWidth != null) {
+        // SL above resistance zone top by pct of zone width
+        trade.stopLossPrice = mtfsr.resistanceZoneTop + (mtfsr.resistanceZoneWidth * pct)
+      }
+
+      // Recalculate TP based on new SL distance (RR ratio)
+      if (trade.stopLossPrice != null) {
+        const slDist = Math.abs(entryPrice - trade.stopLossPrice)
+        const tp = this._config.takeProfit
+        const rrMultiplier = tp.type === 'rr_ratio' ? tp.value : 1.0
+        trade.takeProfitPrice = direction === 'long'
+          ? entryPrice + slDist * rrMultiplier
+          : entryPrice - slDist * rrMultiplier
+      }
+    }
+
     return trade
   }
 
@@ -393,6 +418,10 @@ export class TradeSimulator {
         break
       case 'percent':
         distance = entryPrice * (sl.value / 100)
+        break
+      case 'sr_zone_percent':
+        // Placeholder — actual SL is overridden in openPosition() using zone data
+        distance = sl.value * atr || entryPrice * 0.005
         break
     }
 
