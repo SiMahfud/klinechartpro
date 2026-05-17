@@ -142,7 +142,7 @@ export class TradeSimulator {
 
     const pipValue = this._config.costs.pipValue || 1
     const pnlPips = priceDiff / this.getPipSize()
-    const pnl = priceDiff * trade.lotSize * pipValue - trade.costs.total
+    const pnl = pnlPips * trade.lotSize * pipValue - trade.costs.total
 
     trade.exitBar = barIndex
     trade.exitPrice = exitPrice
@@ -155,7 +155,7 @@ export class TradeSimulator {
 
     // Update equity
     this._equity += pnl + trade.costs.total  // add back costs since pnl already includes them
-    this._equity += priceDiff * trade.lotSize * pipValue
+    this._equity += pnlPips * trade.lotSize * pipValue
 
     // Remove from open, add to closed
     this._openPositions.splice(idx, 1)
@@ -293,7 +293,8 @@ export class TradeSimulator {
       const priceDiff = trade.direction === 'long'
         ? bar.close - trade.entryPrice
         : trade.entryPrice - bar.close
-      unrealizedPnL += priceDiff * trade.lotSize * pipValue
+      const pnlPips = priceDiff / this.getPipSize()
+      unrealizedPnL += pnlPips * trade.lotSize * pipValue - trade.costs.total
     }
 
     const totalEquity = this._equity + unrealizedPnL
@@ -319,9 +320,8 @@ export class TradeSimulator {
 
   calculateSpreadCost (price: number): number {
     if (!this._config.costs.includeSpread) return 0
-    const pipSize = this.getPipSize()
     const pipValue = this._config.costs.pipValue || 1
-    return this._config.costs.spreadPips * pipSize * this._config.lotSize * pipValue
+    return this._config.costs.spreadPips * this._config.lotSize * pipValue
   }
 
   calculateCommission (): number {
@@ -447,8 +447,9 @@ export class TradeSimulator {
       ? trade.exitPrice - trade.entryPrice
       : trade.entryPrice - trade.exitPrice
 
-    trade.pnlPips = priceDiff / this.getPipSize()
-    trade.pnl = priceDiff * trade.lotSize * pipValue - trade.costs.total
+    const pnlPips = priceDiff / this.getPipSize()
+    trade.pnlPips = pnlPips
+    trade.pnl = pnlPips * trade.lotSize * pipValue - trade.costs.total
     trade.pnlPercent = (trade.pnl / this._config.initialCapital) * 100
   }
 }

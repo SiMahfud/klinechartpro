@@ -932,33 +932,27 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
     const dataList = widget.getDataList()
     if (!dataList || dataList.length === 0) return indicatorData
 
-    // Collect from all active indicators
-    const allIndicators = [...mainIndicators(), ...Object.keys(subIndicators())]
-
-    for (const indName of allIndicators) {
-      try {
-        // Try to get indicator data from chart's internal store
-        const chartInstance = widget as any
-        const chartStore = chartInstance.getChartStore?.() ?? chartInstance._chartStore
-        if (chartStore) {
-          const indicatorStore = chartStore.getIndicatorStore?.()
-          if (indicatorStore) {
-            const instances = indicatorStore.getInstances?.() ?? new Map()
-            // Search across all panes
-            for (const [_paneId, paneIndicators] of instances) {
-              for (const ind of paneIndicators) {
-                if (ind.name === indName && ind.result) {
-                  indicatorData.set(indName, ind.result)
-                }
+    try {
+      // Use public API: getIndicatorByPaneId() with no args returns all panes
+      const allPanes = widget.getIndicatorByPaneId() as any
+      if (allPanes instanceof Map) {
+        // Map<paneId, Map<indicatorName, Indicator>>
+        for (const [_paneId, paneMap] of allPanes) {
+          if (paneMap instanceof Map) {
+            for (const [name, ind] of paneMap) {
+              const indicator = ind as any
+              if (indicator?.result && indicator.result.length > 0) {
+                indicatorData.set(name, indicator.result)
               }
             }
           }
         }
-      } catch (e) {
-        console.warn(`[Strategy] Could not collect data for indicator ${indName}:`, e)
       }
+    } catch (e) {
+      console.warn('[Strategy] Error collecting indicator data:', e)
     }
 
+    console.log(`[Strategy] Collected indicators: ${[...indicatorData.keys()].join(', ')} (${indicatorData.size} total)`)
     return indicatorData
   }
 
@@ -1145,6 +1139,9 @@ const ChartProComponent: Component<ChartProComponentProps> = props => {
 
     // ── Visual Mode: Rule-based ──
     const indicatorData = collectChartIndicatorData()
+
+
+
     const engine = new StrategyEngine(config)
     const results = engine.runBacktest(
       dataList, indicatorData,

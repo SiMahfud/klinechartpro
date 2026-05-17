@@ -36,3 +36,5 @@ export {
   PRICE_FIELDS,
   BUILTIN_INDICATOR_FIELDS
 } from './types'
+
+export { STRATEGY_PRESETS } from './presets'

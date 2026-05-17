@@ -13,6 +13,7 @@ import type {
   IndicatorFieldInfo
 } from '../../strategy/types'
 import { PRICE_FIELDS, BUILTIN_INDICATOR_FIELDS } from '../../strategy/types'
+import { STRATEGY_PRESETS } from '../../strategy/presets'
 import i18n from '../../i18n'
 import RuleRow from './RuleRow'
 
@@ -651,6 +652,28 @@ const StrategyModal: Component<StrategyModalProps> = props => {
 
           {/* ─── TAB: Manage ─── */}
           <Show when={activeTab() === 'manage'}>
+            {/* Presets */}
+            <div class="strategy-section">
+              <div class="strategy-section-title">📋 Strategy Presets</div>
+              <div style={{ display: 'flex', gap: '6px', 'flex-wrap': 'wrap', 'margin-bottom': '8px' }}>
+                <For each={STRATEGY_PRESETS}>
+                  {(preset) => (
+                    <button
+                      class="strategy-btn secondary"
+                      style={{ 'font-size': '11px', padding: '6px 10px', 'text-align': 'left', 'max-width': '100%' }}
+                      onClick={() => {
+                        const copy = { ...preset, id: `${Date.now()}_${Math.random().toString(36).substring(2, 8)}` }
+                        loadStrategy(copy)
+                      }}
+                      title={preset.description}>
+                      {preset.name}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </div>
+
+            {/* Saved */}
             <div class="strategy-section">
               <div class="strategy-section-title">{i18n('save_strategy', props.locale) || 'Saved Strategies'}</div>
               <Show when={props.savedStrategies.length === 0}>

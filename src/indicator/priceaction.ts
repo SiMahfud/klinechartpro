@@ -178,12 +178,6 @@ const priceaction: IndicatorTemplate = {
       // Pattern detection
       let { pattern, direction, strength } = detectPattern(bar, prev, pinWickRatio)
 
-      // Filter by toggle
-      if (pattern === 'pin_bar' && !showPin) { pattern = undefined; direction = undefined; strength = 0 }
-      if (pattern === 'engulfing' && !showEngulf) { pattern = undefined; direction = undefined; strength = 0 }
-      if (pattern === 'inside_bar' && !showInside) { pattern = undefined; direction = undefined; strength = 0 }
-      if (pattern === 'doji' && !showDoji) { pattern = undefined; direction = undefined; strength = 0 }
-
       // Volume spike with direction
       const vol = bar.volume ?? 0
       const vma = volMA[i] || 1
@@ -204,18 +198,29 @@ const priceaction: IndicatorTemplate = {
       return { pattern, direction, wickRatio, bodyPercent, volumeSpike, volSpikeDir, strength }
     })
 
-    // Return only non-numeric fields to klinecharts (prevents Y-axis scaling issues)
-    // Strategy builder can still access these via indicator.result[i]
+    // Return all fields — _pa figure key is always undefined so klinecharts
+    // won't use numeric fields for Y-axis scaling. Strategy engine reads from ind.result.
     return _paCache.map(r => ({
       _pa: undefined,
       pattern: r.pattern,
       direction: r.direction,
-      volSpikeDir: r.volSpikeDir
+      volSpikeDir: r.volSpikeDir,
+      wickRatio: r.wickRatio,
+      bodyPercent: r.bodyPercent,
+      volumeSpike: r.volumeSpike,
+      strength: r.strength
     }))
   },
 
-  draw: ({ ctx, visibleRange, bounding, yAxis, xAxis }: any) => {
+  draw: ({ ctx, visibleRange, bounding, yAxis, xAxis, indicator }: any) => {
     if (_paCache.length === 0) return false
+
+    const p = indicator.calcParams
+    const showPin = p[1] as boolean
+    const showEngulf = p[2] as boolean
+    const showInside = p[3] as boolean
+    const showDoji = p[4] as boolean
+    const showVolSpike = p[7] as boolean
 
     const dataList = (window as any)?._klineChartInstance?.getDataList?.() ?? []
     if (dataList.length === 0) return false
@@ -235,7 +240,7 @@ const priceaction: IndicatorTemplate = {
       const x = xAxis.convertToPixel(i)
 
       // ── Draw Volume Spike marker ──
-      if (r.volumeSpike) {
+      if (r.volumeSpike && showVolSpike) {
         const isBuySpike = r.volSpikeDir === 'bull'
         const y = isBuySpike
           ? yAxis.convertToPixel(bar.low) + 22
@@ -251,6 +256,12 @@ const priceaction: IndicatorTemplate = {
 
       // ── Draw Pattern marker ──
       if (r.pattern) {
+        // Skip drawing if user toggled this pattern off
+        if (r.pattern === 'pin_bar' && !showPin) continue
+        if (r.pattern === 'engulfing' && !showEngulf) continue
+        if (r.pattern === 'inside_bar' && !showInside) continue
+        if (r.pattern === 'doji' && !showDoji) continue
+
         let color = '#B0BEC5'
         let marker = ''
         let yPos = 0
@@ -314,6 +325,13 @@ const priceaction: IndicatorTemplate = {
   },
 
   createTooltipDataSource: ({ indicator, crosshair, defaultStyles }: any) => {
+    const p = indicator.calcParams
+    const showPin = p[1] as boolean
+    const showEngulf = p[2] as boolean
+    const showInside = p[3] as boolean
+    const showDoji = p[4] as boolean
+    const showVolSpike = p[7] as boolean
+
     const icons: any[] = []
     const di = defaultStyles?.tooltip?.icons
     if (di) {
@@ -331,21 +349,30 @@ const priceaction: IndicatorTemplate = {
     const values: any[] = []
 
     if (r.pattern) {
-      const patternLabel = r.pattern.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
-      const dirLabel = r.direction ? ` (${r.direction === 'bull' ? '↑ Bull' : '↓ Bear'})` : ''
-      const colorKey = r.direction
-        ? (r.pattern === 'pin_bar'
-          ? (r.direction === 'bull' ? COLORS.bull_pin : COLORS.bear_pin)
-          : (r.direction === 'bull' ? COLORS.bull_engulf : COLORS.bear_engulf))
-        : COLORS.doji
+      // Check if this specific pattern is allowed to be shown in tooltip
+      let canShowPattern = false
+      if (r.pattern === 'pin_bar' && showPin) canShowPattern = true
+      if (r.pattern === 'engulfing' && showEngulf) canShowPattern = true
+      if (r.pattern === 'inside_bar' && showInside) canShowPattern = true
+      if (r.pattern === 'doji' && showDoji) canShowPattern = true
 
-      values.push({
-        title: '',
-        value: { text: `${patternLabel}${dirLabel} str:${'●'.repeat(r.strength)}`, color: colorKey }
-      })
+      if (canShowPattern) {
+        const patternLabel = r.pattern.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+        const dirLabel = r.direction ? ` (${r.direction === 'bull' ? '↑ Bull' : '↓ Bear'})` : ''
+        const colorKey = r.direction
+          ? (r.pattern === 'pin_bar'
+            ? (r.direction === 'bull' ? COLORS.bull_pin : COLORS.bear_pin)
+            : (r.direction === 'bull' ? COLORS.bull_engulf : COLORS.bear_engulf))
+          : COLORS.doji
+
+        values.push({
+          title: '',
+          value: { text: `${patternLabel}${dirLabel} str:${'●'.repeat(r.strength)}`, color: colorKey }
+        })
+      }
     }
 
-    if (r.volumeSpike) {
+    if (r.volumeSpike && showVolSpike) {
       const isBuy = r.volSpikeDir === 'bull'
       values.push({
         title: '',
